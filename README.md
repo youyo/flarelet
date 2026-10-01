@@ -38,7 +38,12 @@ Runtimes and tasks of this repository are managed with [mise](https://mise.jdx.d
 
 ## Installation
 
-Flarelet is not published to npm yet.
+Node.js 24 or later is all you need to run it.
+
+```bash
+npx flarelet@latest init      # try it without installing
+npm i -g flarelet             # install globally
+```
 
 ### Build from the repository
 
@@ -54,15 +59,15 @@ Use `npm link` (or an alias to the build output) to get a `flarelet` command.
 
 ### Install a packaged build
 
-`dist/` is not committed and there is no `prepare` script, so a plain git spec (`npm install github:youyo/flarelet`) does not produce a working CLI. Build a tarball instead:
+To try local changes instead of the published npm package, build a tarball and install it. `dist/` is not committed and there is no `prepare` script, so a plain git spec (`npm install github:youyo/flarelet`) does not produce a working CLI:
 
 ```bash
 mise run build
-npm pack                                  # creates flarelet-0.0.0.tgz
-npm install -g ./flarelet-0.0.0.tgz        # or host the tarball and install it from its URL
+npm pack                                  # creates flarelet-0.1.0.tgz
+npm install -g ./flarelet-0.1.0.tgz        # or host the tarball and install it from its URL
 ```
 
-The GitHub Actions workflow installs Flarelet from the repository variable `FLARELET_PACKAGE` (see [GitHub Actions](#github-actions)), so a tarball URL works there too.
+The GitHub Actions workflow can install such a tarball too: set the repository variable `FLARELET_PACKAGE` to its URL (see [GitHub Actions](#github-actions)).
 
 For zsh completion, see [Shell completion (zsh)](#shell-completion-zsh).
 
@@ -318,10 +323,10 @@ PR previews, branch deploys and cleanup run from GitHub Actions with OIDC.
    ```bash
    gh variable set FLARELET_AWS_ROLE_ARN --repo owner/name --body arn:aws:iam::123456789012:role/flarelet-github-owner-name
    gh variable set FLARELET_AWS_REGION   --repo owner/name --body ap-northeast-1
-   gh variable set FLARELET_PACKAGE      --repo owner/name --body https://example.com/flarelet-0.0.0.tgz
+   gh variable set FLARELET_PACKAGE      --repo owner/name --body https://example.com/flarelet-0.1.0.tgz
    ```
 
-   Flarelet is not published to npm, and the workflow defaults to `npx flarelet@latest`. Until it is published, set `FLARELET_PACKAGE` to where Flarelet can be installed from, such as a tarball URL.
+   The workflow installs the exact Flarelet version that ran `flarelet init` / `flarelet workflow generate` (`npx flarelet@<version>`). `FLARELET_PACKAGE` is optional: set it only to override the install source, such as a tarball URL or a git spec.
 
 3. Commit and push the `.github/workflows/flarelet.yml` that `flarelet init` created.
 
@@ -460,3 +465,26 @@ Other tasks: `test:e2e:file` and `test:e2e:aws:file` (run a single file), `test:
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`. It installs zsh (the completion E2E uses it), sets up tools with mise (Node, Python, actionlint), then runs `mise run install`, `lint`, `lint:actions`, `typecheck`, `test` (unit + always-on E2E, with no AWS credentials) and `pack:check`.
 
 The development method is TDD (Red -> Green -> Refactor, with both unit and E2E tests).
+
+## License
+
+[MIT](LICENSE)
+
+## Releasing
+
+For maintainers. Publishing is done by [`.github/workflows/release.yml`](.github/workflows/release.yml) when a `v*` tag is pushed. It uses npm trusted publishing (OIDC), so no npm token is stored anywhere, and provenance is attached automatically (public repository only).
+
+1. Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`
+2. The workflow runs lint / typecheck / test / pack:check, checks that the tag matches the `package.json` version, runs `npm publish`, and creates a GitHub Release with generated notes
+
+### First publish (once, by hand)
+
+A trusted publisher can only be registered for a package that already exists on npm, so publish the very first version from your machine:
+
+```bash
+mise run install && mise run test    # sanity check
+npm login
+npm publish --provenance=false       # provenance cannot be generated locally
+```
+
+Then, on npmjs.com, open the `flarelet` package, go to Settings -> Trusted Publisher, choose GitHub Actions and register organization or user `youyo`, repository `flarelet`, workflow filename `release.yml` (with npm 11.15 or later, `npm trust github flarelet --file release.yml --repo youyo/flarelet --allow-publish` does the same). From then on, pushing a tag is all it takes. If you push the tag of the version you published by hand, the workflow skips the npm publish and only creates the GitHub Release.

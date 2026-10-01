@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { awsCloud } from "../aws/real.js";
@@ -21,12 +20,8 @@ import { runSecretDelete, runSecretList, runSecretSet } from "./secret.js";
 import { defaultSkillDeps, runSkillInstall } from "./skill.js";
 import { defaultSynthDeps, runPlan, runSynth, type SynthArgs } from "./synth.js";
 import { runValidate, type Io } from "./validate.js";
+import { packageVersion } from "./version.js";
 import { runWorkflowGenerate } from "./workflow-generate.js";
-
-function packageVersion(): string {
-  const url = new URL("../../package.json", import.meta.url);
-  return (JSON.parse(readFileSync(url, "utf8")) as { version: string }).version;
-}
 
 /**
  * 補完候補（argChoices）だけを付ける。commander の `.choices()` は検証とエラー文言まで変えてしまうので、

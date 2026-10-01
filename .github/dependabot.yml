@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+      aws-cdk:
+        patterns:
+          - "aws-cdk-lib"
+          - "@aws-cdk/*"
+          - "constructs"
+      lint-and-format:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-config-*"
+          - "typescript-eslint"
+          - "prettier"
+      test:
+        patterns:
+          - "vitest"
+          - "playwright"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

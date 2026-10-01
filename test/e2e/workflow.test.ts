@@ -50,6 +50,12 @@ describe("workflow follows the git settings", () => {
     expect((await run(["init", "."], dir)).code).toBe(0);
     expect(await branches()).toEqual(["main"]);
     expect(await readFile(wf, "utf8")).toContain("flarelet workflow generate --force");
+    // 実行した CLI 自身のバージョンに固定される
+    const { version } = JSON.parse(
+      await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"),
+    ) as { version: string };
+    expect(await readFile(wf, "utf8")).toContain(`'flarelet@${version}'`);
+    expect((await run(["--version"], dir)).stdout.trim()).toBe(version);
 
     let r = await run(["workflow", "generate"], dir);
     expect(r.code, r.stderr).toBe(0);

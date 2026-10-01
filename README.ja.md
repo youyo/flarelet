@@ -38,7 +38,12 @@ flarelet logs
 
 ## インストール
 
-Flarelet は npm へまだ公開していません。
+Node.js 24 以上があればインストール不要で実行できます。
+
+```bash
+npx flarelet@latest init      # 試す（インストール不要）
+npm i -g flarelet             # グローバルにインストール
+```
 
 ### リポジトリからビルドする
 
@@ -54,15 +59,15 @@ node dist/cli/index.js --help
 
 ### パッケージとしてインストールする
 
-`dist/` はコミットされておらず `prepare` スクリプトもないため、git 指定のまま（`npm install github:youyo/flarelet`）では動く CLI になりません。代わりに tarball を作ります。
+公開済みの npm パッケージではなく手元の変更を試したいときは、tarball を作ってインストールできます。`dist/` はコミットされておらず `prepare` スクリプトもないため、git 指定のまま（`npm install github:youyo/flarelet`）では動く CLI になりません。
 
 ```bash
 mise run build
-npm pack                                  # flarelet-0.0.0.tgz を作成
-npm install -g ./flarelet-0.0.0.tgz        # tarball を置いて URL からインストールしても可
+npm pack                                  # flarelet-0.1.0.tgz を作成
+npm install -g ./flarelet-0.1.0.tgz        # tarball を置いて URL からインストールしても可
 ```
 
-GitHub Actions のワークフローはリポジトリ変数 `FLARELET_PACKAGE` からインストールします（[GitHub Actions](#github-actions) を参照）。tarball の URL をそのまま指定できます。
+GitHub Actions のワークフローでも、リポジトリ変数 `FLARELET_PACKAGE` にその tarball の URL を設定すれば使えます（[GitHub Actions](#github-actions) を参照）。
 
 zsh の補完は [シェル補完（zsh）](#シェル補完zsh) を参照してください。
 
@@ -318,10 +323,10 @@ PR プレビュー、ブランチのデプロイ、後片付けを GitHub Action
    ```bash
    gh variable set FLARELET_AWS_ROLE_ARN --repo owner/name --body arn:aws:iam::123456789012:role/flarelet-github-owner-name
    gh variable set FLARELET_AWS_REGION   --repo owner/name --body ap-northeast-1
-   gh variable set FLARELET_PACKAGE      --repo owner/name --body https://example.com/flarelet-0.0.0.tgz
+   gh variable set FLARELET_PACKAGE      --repo owner/name --body https://example.com/flarelet-0.1.0.tgz
    ```
 
-   Flarelet は npm に未公開で、ワークフローは既定で `npx flarelet@latest` を使います。公開されるまでは `FLARELET_PACKAGE` に tarball の URL などインストール元を設定してください。
+   ワークフローは `flarelet init` / `flarelet workflow generate` を実行した CLI 自身のバージョンに固定して `npx flarelet@<version>` で導入します。`FLARELET_PACKAGE` は上書きしたいときだけ設定してください（tarball の URL や git 指定など。省略可）。
 
 3. `flarelet init` が作った `.github/workflows/flarelet.yml` をコミットして push します。
 
@@ -460,3 +465,26 @@ mise run lint:actions # GitHub Actions ワークフローを actionlint で検�
 `.github/workflows/ci.yml` は PR と `main` への push で動きます。zsh を入れ（補完の E2E が使います）、mise でツール（Node・Python・actionlint）を用意してから、`mise run install`、`lint`、`lint:actions`、`typecheck`、`test`（unit + 常時 E2E。AWS 認証情報は渡しません）、`pack:check` を実行します。
 
 開発手法は TDD（Red → Green → Refactor、Unit と E2E の両方）です。
+
+## ライセンス
+
+[MIT](LICENSE)
+
+## リリース手順
+
+メンテナ向けです。公開は `v*` タグの push で [`.github/workflows/release.yml`](.github/workflows/release.yml) が行います。npm の trusted publishing（OIDC）を使うので、npm トークンはどこにも保存しません。provenance も自動で付きます（公開リポジトリからの公開のみ）。
+
+1. `package.json` の `version` を上げてコミットし、`git tag vX.Y.Z && git push origin vX.Y.Z`
+2. ワークフローが lint / typecheck / test / pack:check を通し、タグと `package.json` の version の一致を確認してから `npm publish` し、GitHub Release（リリースノート自動生成）を作ります
+
+### 初回公開（一度だけ手動）
+
+trusted publisher は npm 上に存在するパッケージにしか登録できないため、最初の 1 回だけ手元から公開します。
+
+```bash
+mise run install && mise run test    # 事前確認
+npm login
+npm publish --provenance=false       # 手元では provenance を生成できない
+```
+
+その後 npmjs.com の `flarelet` パッケージの Settings → Trusted Publisher で GitHub Actions を選び、Organization or user `youyo`、Repository `flarelet`、Workflow filename `release.yml` を登録します（npm 11.15 以上なら `npm trust github flarelet --file release.yml --repo youyo/flarelet --allow-publish` でも可）。以降は上記のタグ push だけで公開できます。初回の version と同じタグを push した場合、ワークフローは npm への公開を飛ばして GitHub Release だけを作ります。

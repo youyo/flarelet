@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 生成された JSON/YAML を緩く検査する */
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -107,6 +107,10 @@ describe("runInit", () => {
   });
 });
 
+const packageJson = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 describe("runInit GitHub workflow", () => {
   const wf = async (opts: Parameters<typeof runInit>[0]) => {
     const t = io();
@@ -147,6 +151,9 @@ describe("runInit GitHub workflow", () => {
     expect(text).toContain("github comment --state ${{ steps.deploy.outcome == 'success'");
     expect(text).toContain("github comment --state inactive");
     expect(text).toContain("FLARELET_PACKAGE");
+    // init を実行した CLI 自身のバージョンに固定する
+    expect(text).toContain(`'flarelet@${packageJson.version}'`);
+    expect(text).not.toContain("flarelet@latest");
     expect(text).not.toMatch(/AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID/);
   });
 

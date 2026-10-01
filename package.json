@@ -1,9 +1,27 @@
 {
   "name": "flarelet",
-  "version": "0.0.0",
-  "description": "Serverless application platform for AWS",
+  "version": "0.1.0",
+  "description": "Serverless application platform for AWS: declare what your app needs in YAML, push, and Flarelet handles infrastructure, auth, previews and deployment.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/youyo/flarelet.git"
+  },
+  "homepage": "https://github.com/youyo/flarelet#readme",
+  "bugs": {
+    "url": "https://github.com/youyo/flarelet/issues"
+  },
+  "keywords": [
+    "aws",
+    "serverless",
+    "lambda",
+    "cdk",
+    "cli",
+    "preview-environments",
+    "github-actions",
+    "deploy"
+  ],
   "bin": {
     "flarelet": "./dist/cli/index.js"
   },
@@ -20,6 +38,7 @@
   "files": [
     "dist",
     ".agents/skills",
+    "LICENSE",
     "README.ja.md"
   ],
   "engines": {
@@ -55,5 +74,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

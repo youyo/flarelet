@@ -7,6 +7,8 @@ export interface WorkflowOptions {
   runtime: RuntimeLanguage;
   /** push で deploy する永続ブランチ（GitHub の branches フィルタのパターン）。 */
   branches: string[];
+  /** ワークフローが npx で導入する flarelet の version。生成した CLI 自身のものに固定する。 */
+  version: string;
 }
 
 /** YAML のフロー列に素のまま書ける（文字列として解釈される）ものだけ素で、他は引用する。 */
@@ -71,9 +73,9 @@ export function checkWorkflowDrift(
  * GitHub Actions ワークフロー雛形。
  * - push（永続ブランチ）→ deploy、PR の opened/synchronize/reopened → preview deploy、closed → destroy
  * - AWS へは OIDC（長期アクセスキーなし）。ロール ARN とリージョンはリポジトリ変数
- * - Flarelet は未公開のため、インストール元は FLARELET_PACKAGE（リポジトリ変数で上書き可）で指定する
+ * - Flarelet は生成した CLI 自身の version に固定して npx で導入する（FLARELET_PACKAGE リポジトリ変数で上書き可）
  */
-export function workflowTemplate({ runtime, branches }: WorkflowOptions): string {
+export function workflowTemplate({ runtime, branches, version }: WorkflowOptions): string {
   const install =
     runtime === "typescript"
       ? `
@@ -116,9 +118,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Flarelet is not published to npm yet. Set the repository variable FLARELET_PACKAGE
-  # (e.g. a tarball URL or git spec) to install it from elsewhere.
-  FLARELET_PACKAGE: \${{ vars.FLARELET_PACKAGE || 'flarelet@latest' }}
+  # Pinned to the Flarelet version that generated this file (regenerate with flarelet workflow generate --force
+  # after upgrading). Set the repository variable FLARELET_PACKAGE to override (e.g. a tarball URL or git spec).
+  FLARELET_PACKAGE: \${{ vars.FLARELET_PACKAGE || 'flarelet@${version}' }}
 
 jobs:
   deploy:

@@ -9,6 +9,10 @@ Flarelet は、`flarelet.yaml` 1 枚と `flarelet deploy` で Web アプリを A
 
 コマンドの全オプションは [references/cli.md](references/cli.md)、`flarelet.yaml` の全キーは [references/flarelet-yaml.md](references/flarelet-yaml.md) を読んでください。推測でオプションやキーを書かず、まずそこで確認します。
 
+## インストール
+
+npm に公開されています（Node.js 24 以上）。`flarelet` コマンドが無ければ `npx flarelet@latest <コマンド>` で実行するか、`npm i -g flarelet` で導入します。
+
 ## メンタルモデル
 
 - **設定は `flarelet.yaml` だけ**: ランタイム、`http`、`database`、`storage`、`ai`、`secrets`、`git` を宣言します。変更したら `flarelet validate`

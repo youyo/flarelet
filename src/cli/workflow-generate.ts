@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { RuntimeLanguage } from "../ir/index.js";
 import { loadIR } from "./load.js";
 import type { Io } from "./validate.js";
+import { packageVersion } from "./version.js";
 import { WORKFLOW_PATH, workflowBranches, workflowTemplate } from "./workflow.js";
 
 export interface WorkflowGenerateArgs {
@@ -18,7 +19,11 @@ export function renderWorkflow(
   git: Parameters<typeof workflowBranches>[0],
   defaultBranch: string,
 ): string {
-  return workflowTemplate({ runtime, branches: workflowBranches(git, defaultBranch) });
+  return workflowTemplate({
+    runtime,
+    branches: workflowBranches(git, defaultBranch),
+    version: packageVersion(),
+  });
 }
 
 /** flarelet.yaml の git 設定から .github/workflows/flarelet.yml を（再）生成する。 */

@@ -1,0 +1,66 @@
+name: Release
+
+# Push a tag such as v0.1.0 to publish that version to npm (trusted publishing / OIDC, no npm token stored)
+# and create a GitHub Release with generated notes.
+on:
+  push:
+    tags: ["v*"]
+
+# id-token: npm trusted publishing (OIDC) and provenance. contents: write only for the GitHub Release.
+permissions:
+  id-token: write
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the tag matches package.json
+        run: |
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "v${pkg_version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version v${pkg_version}"
+            exit 1
+          fi
+
+      # completion の E2E が zsh（zpty）を使う
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh
+
+      - uses: jdx/mise-action@v5
+        with:
+          cache: true
+
+      - run: mise run install
+      - run: mise run lint
+      - run: mise run lint:actions
+      - run: mise run typecheck
+      - run: mise run test
+      - run: mise run pack:check
+
+      # Trusted publishing needs npm CLI 11.5.1 or later (https://docs.npmjs.com/trusted-publishers)
+      - name: Use a recent npm
+        run: npm install -g npm@11
+
+      # The first version is published by hand (a trusted publisher can only be registered for an existing
+      # package), so skip when this exact version is already on npm and just create the GitHub Release.
+      - name: Publish to npm
+        run: |
+          pkg_version="$(node -p "require('./package.json').version")"
+          if npm view "flarelet@${pkg_version}" version >/dev/null 2>&1; then
+            echo "flarelet@${pkg_version} is already on npm; skipping publish"
+          else
+            npm publish
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes --verify-tag

@@ -3,8 +3,8 @@ import { groupFromIdentifier } from "../../src/aws/real.js";
 
 describe("groupFromIdentifier", () => {
   it("handles the account:name form Live Tail returns", () => {
-    expect(groupFromIdentifier("963262494726:/aws/lambda/fn")).toBe("/aws/lambda/fn");
-    expect(groupFromIdentifier("963262494726:flarelet-app-AppLogs-X")).toBe(
+    expect(groupFromIdentifier("123456789012:/aws/lambda/fn")).toBe("/aws/lambda/fn");
+    expect(groupFromIdentifier("123456789012:flarelet-app-AppLogs-X")).toBe(
       "flarelet-app-AppLogs-X",
     );
   });

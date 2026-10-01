@@ -69,7 +69,8 @@ describe("workflowBranches", () => {
 });
 
 describe("workflowTemplate branches", () => {
-  const text = (branches: string[]) => workflowTemplate({ runtime: "python", branches });
+  const text = (branches: string[]) =>
+    workflowTemplate({ runtime: "python", branches, version: "0.0.1" });
   it("quotes patterns that are not plain YAML scalars", () => {
     const doc = parseYaml(text(["main", "release/*", "**", "a\\+b"])) as any;
     expect(doc.on.push.branches).toEqual(["main", "release/*", "**", "a\\+b"]);
@@ -83,6 +84,17 @@ describe("workflowTemplate branches", () => {
   });
 });
 
+describe("workflowTemplate package pinning", () => {
+  const t = (version: string) =>
+    workflowTemplate({ runtime: "python", branches: ["main"], version });
+  it("pins the install to the given version and keeps the FLARELET_PACKAGE override", () => {
+    const doc = parseYaml(t("1.2.3")) as any;
+    expect(doc.env.FLARELET_PACKAGE).toBe("${{ vars.FLARELET_PACKAGE || 'flarelet@1.2.3' }}");
+    expect(t("1.2.3")).not.toContain("flarelet@latest");
+    expect(t("1.2.3")).not.toMatch(/not published/i);
+  });
+});
+
 describe("pushBranchesOf", () => {
   it("reads on.push.branches, null when absent or unparsable", () => {
     expect(pushBranchesOf("on:\n  push:\n    branches: [a, b]\n")).toEqual(["a", "b"]);
@@ -93,7 +105,8 @@ describe("pushBranchesOf", () => {
 });
 
 describe("checkWorkflowDrift", () => {
-  const wf = (branches: string[]) => workflowTemplate({ runtime: "python", branches });
+  const wf = (branches: string[]) =>
+    workflowTemplate({ runtime: "python", branches, version: "0.0.1" });
   it("returns null when matching (order-insensitive)", () => {
     expect(
       checkWorkflowDrift(
