@@ -80,5 +80,7 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
   io.stdout("  flareon bootstrap github --repo <owner>/<name>");
   io.stdout("  gh variable set FLAREON_AWS_ROLE_ARN --body <role arn printed above>");
   io.stdout("  gh variable set FLAREON_AWS_REGION --body <region>");
+  io.stdout("");
+  io.stdout("AI coding agents (Claude Code etc.): flareon skill install");
   return 0;
 }

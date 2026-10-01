@@ -12,7 +12,10 @@ import {
 } from "./auth-fixtures.js";
 
 const sessionCookie = (mode: "cognito" | "preview") =>
-  issueSessionCookie({ sub: "u1", email: "a@b.c" }, mode, SESSION_KEY, NOW).split(";")[0]!;
+  // epoch 1 = テスト用 deps の現在のセッション世代
+  issueSessionCookie({ sub: "u1", email: "a@b.c", epoch: 1 }, mode, SESSION_KEY, NOW).split(
+    ";",
+  )[0]!;
 
 describe("router (cognito)", () => {
   it("未認証ブラウザは login へ 302 (return_to 付き)", async () => {

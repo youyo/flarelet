@@ -55,9 +55,10 @@
 - `FLAREON_AUTH_MODE`: `cognito` | `preview`
 - `FLAREON_APP_FUNCTION_NAME`: Invoke 先 app Lambda
 - `FLAREON_SESSION_SECRET_ARN`: Cookie 署名鍵（Secrets Manager）
+- `FLAREON_SESSION_EPOCH_PARAM`: セッション世代の SSM パラメータ名（必須。「セキュリティスキャンの指摘対応」）
 - cognito: `FLAREON_COGNITO_DOMAIN`（`https://<prefix>.auth.<region>.amazoncognito.com`）、`FLAREON_COGNITO_CLIENT_ID`、`FLAREON_COGNITO_USER_POOL_ID`（issuer/JWKS 検証用）
 - preview: `FLAREON_PREVIEW_TOKEN_SECRET_ARN`
-- app へ渡すヘッダ: `x-flareon-user-sub`、`x-flareon-user-email`、`x-flareon-auth-mode`
+- app へ渡すヘッダ: `x-flareon-user-sub`、`x-flareon-user-email`、`x-flareon-user-email-verified`（`true`|`false`）、`x-flareon-auth-mode`
 
 ## ユーザー secrets
 - `flareon secret set NAME` → SSM SecureString `/flareon/{app}/{stage}/secrets/{NAME}`（stage スコープ）
@@ -161,3 +162,33 @@
 
 ### flareon dev（python）の .pyc
 - python の子プロセスに `PYTHONDONTWRITEBYTECODE=1` を渡す。.pyc の鮮度判定はソースの mtime（秒）とサイズなので、同じ秒に同じサイズで書き換えると古いバイトコードが使われ、再起動しても変更が反映されないことがある（利用者の実使用でも起きる）。書き込みを止めるだけなので、既存の `__pycache__` の .pyc はソースと mtime・サイズが一致する間は読まれる
+
+## セキュリティスキャンの指摘対応
+
+### 未検証 email（F1）
+- セッションに `ev`（email_verified）を持ち、app へ `x-flareon-user-email-verified: true|false` を渡す。`flareon/runtime` の `identity()` は `emailVerified` を返す。`x-flareon-user-email` は互換のため残す
+- 判定: cognito / oidc / google は id_token の `email_verified` が `true` または `"true"` のときだけ true。entra は `email_verified` を出さないので常に false（allow の判定は従来どおり）。email が無い identity（preview）は false。`flareon dev --as` は利用者が指定した擬似ユーザーなので true
+- 古いセッション（`ev` なし）は false
+- 認可・ユーザーの紐付けは `sub` を使う（README / runtime の JSDoc / スキルに明記）
+- cognito ネイティブの User Pool に `UserAttributeUpdateSettings.AttributesRequireVerificationBeforeUpdate = [email]`（CDK `keepOriginal: { email: true }`）。新しい email は検証が済むまで反映されず、`email_verified` も元のまま。更新は「No interruption」（https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-cognito-userpool.html#cfn-cognito-userpool-userattributeupdatesettings ）。`AutoVerifiedAttributes` に email が入っていることが前提（CDK が `signInAliases.email` から入れる。unit で確認）
+- 外部 IdP（google / oidc / entra）のプールには付けない（email は IdP の値でサインインのたびに上書きされる。検証待ちで止まる恐れがある）
+- app client の `WriteAttributes` から email を外すことは **できない**: 実 API（使い捨ての User Pool、email 必須）で `WriteAttributes` に email を含めない組（`name` / `given_name` / `locale` 単独）はすべて `InvalidParameterException: Invalid write attributes specified while creating a client` で拒否され、`email` 単独は受理された。必須属性の変更はプール置換になるので行わない。代わりに keepOriginal と `emailVerified` で守る
+
+### flareon dev（F2 / F3 / F5 / F6）
+- TypeScript アプリ（`flareon init` のテンプレート、examples、実 AWS E2E のフィクスチャ）は `hostname: process.env.HOST ?? "127.0.0.1"` で listen する。Lambda では Lambda Web Adapter が 127.0.0.1:8080 にアクセスするので既定 127.0.0.1 で動く（実 AWS E2E の typescript / preview で確認）
+- `flareon dev` はアプリに `HOST=127.0.0.1` と起動ごとのランダムな `FLAREON_DEV_SECRET`（32 バイト base64url）を渡し、プロキシは転送するリクエストに `x-flareon-dev-secret` を付ける（クライアント由来の同名ヘッダは `x-flareon-*` として削除）。`identity()` は `FLAREON_DEV_SECRET` があればヘッダが一致するときだけ identity を返す（node:crypto に依存しない定数時間比較）。Python 向けの runtime は無いので README に同じ確認を書く
+- プロキシは Host が `localhost` / `127.0.0.1` / `[::1]`（`:port` 可、大文字小文字無視）以外を 403（DNS rebinding）。Host が無い HTTP/1.1 は Node の http サーバーが 400 で拒否する
+- `--as` のときだけ、`Sec-Fetch-Site: cross-site`、または Origin が `http://<Host>` と一致しない（`null` や別ポートを含む）リクエストを 403（CSRF）。`--as` なしは identity が無いので従来どおり
+
+### セッションの失効（F4）
+- セッション世代: SSM String パラメータ。永続 stage は stage スタックの `/flareon/{app}/{stage}/auth/session-epoch`、PR preview は preview スタックの `/flareon/{app}/{stage}/auth/{version}/session-epoch`（アプリが読む secrets パス `/flareon/{app}/{stage}/secrets/` とは別）。auth が無い永続 stage には作らない。DeletionPolicy は Delete（スタックと一緒に消える）
+- front はパラメータの **値ではなくバージョン**（`GetParameter` の `Parameter.Version`）をセッション（`se`）に入れ、現在のバージョンと一致しないセッションを拒否する。理由: CloudFormation はリソースのプロパティ（タグ等）が変わると値をテンプレートの初期値に書き戻すことがあり、値で比べると revoke 前の Cookie が復活し得る。バージョンは書き戻しでも revoke でも単調に進むので、失効が取り消される方向には倒れない。司令塔の指示（値を埋め込む）からの変更点
+- front は世代を 60 秒キャッシュ（コンテナごと）。取得失敗はキャッシュせず 503（fail closed）。サインイン（callback / preview トークン）時も現在の世代を読んで埋め込む
+- 名前は front Lambda の環境変数 `FLAREON_SESSION_EPOCH_PARAM` にリテラルで渡す（クロススタック Export を作らない）。front の権限は該当パラメータ 1 つの `ssm:GetParameter` だけ
+- `flareon auth revoke-sessions`（共通のターゲット指定。PR preview は `--pr N`）がパラメータを新しいランダム値で上書きしてバージョンを進める。パラメータが無い（未デプロイ、またはこの変更より前のデプロイ）ときは作らずにエラー（作ると次の deploy の CloudFormation 作成が「既に存在」で失敗するため）
+- `flareon auth user remove` も削除後に世代を進める（その stage の全員がサインインし直し）。パラメータが無ければ警告のみ
+- 世代の導入により、変更前に発行したセッション（`se` なし）は無効（再サインイン）。セッションの最大寿命は 8 時間のまま
+
+### CI ロール（bootstrap github）
+- `secretsmanager:DescribeSecret` を `arn:aws:secretsmanager:{region}:{account}:secret:flareon/*/auth/*` に追加（外部 IdP の stage を CI から deploy するときの資格情報チェック）。値（`GetSecretValue`）は従来どおり PR preview のシークレットだけ。実 AWS E2E のポリシーシミュレーションで許可／拒否を確認する
+

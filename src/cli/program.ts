@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { Command, InvalidArgumentError } from "commander";
 import { awsCloud } from "../aws/real.js";
 import { toolkitDeployer } from "../aws/toolkit.js";
-import { runUserAdd, runUserList, runUserRemove } from "./auth-user.js";
+import { runRevokeSessions, runUserAdd, runUserList, runUserRemove } from "./auth-user.js";
 import { synthGithubBootstrap } from "../bootstrap/github.js";
 import { gitExec, detectGit } from "../git/index.js";
 import { runBootstrapGithub } from "./bootstrap.js";
@@ -17,6 +17,7 @@ import { readSecretInput } from "./input.js";
 import { runLogs } from "./logs.js";
 import type { OpsDeps } from "./ops.js";
 import { runSecretDelete, runSecretList, runSecretSet } from "./secret.js";
+import { defaultSkillDeps, runSkillInstall } from "./skill.js";
 import { defaultSynthDeps, runPlan, runSynth, type SynthArgs } from "./synth.js";
 import { runValidate, type Io } from "./validate.js";
 
@@ -214,10 +215,19 @@ export function createProgram(): Command {
     },
   );
 
-  const user = program
+  const auth = program
     .command("auth")
     .description("Manage authentication")
-    .enablePositionalOptions()
+    .enablePositionalOptions();
+  targetOptions(
+    auth
+      .command("revoke-sessions")
+      .description("Sign out every session of an environment (takes effect within 60 seconds)"),
+  ).action(async (o: Record<string, unknown>) => {
+    const a = toArgs(o);
+    process.exitCode = await runRevokeSessions(a, opsDeps(a));
+  });
+  const user = auth
     .command("user")
     .description("Manage the users who can sign in to a stage")
     .enablePositionalOptions();
@@ -291,6 +301,26 @@ export function createProgram(): Command {
           ...(typeof o.region === "string" ? { region: o.region } : {}),
         },
         { ...opsDeps(a), synthBootstrap: synthGithubBootstrap },
+      );
+    });
+
+  program
+    .command("skill")
+    .description("AI coding agent skill")
+    .enablePositionalOptions()
+    .command("install")
+    .description("Install the bundled flareon skill for AI coding agents (Claude Code etc.)")
+    .option("--global", "install for the current user (~/.agents/skills, ~/.claude/skills)")
+    .option("--dir <path>", "project root to install into (default: current directory)")
+    .option("--force", "replace an existing installation")
+    .action(async (o: Record<string, unknown>) => {
+      process.exitCode = await runSkillInstall(
+        {
+          global: o.global === true,
+          force: o.force === true,
+          ...(typeof o.dir === "string" ? { dir: o.dir } : {}),
+        },
+        defaultSkillDeps(io),
       );
     });
 

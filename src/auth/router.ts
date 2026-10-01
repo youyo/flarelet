@@ -9,6 +9,21 @@ import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
 const AUTH_PREFIX = "/__flareon/auth/";
 
+/** セッション世代のキャッシュ時間。失効（revoke-sessions）の反映はこの時間だけ遅れる。 */
+export const EPOCH_TTL_MS = 60_000;
+
+/** SSM パラメータのバージョンを TTL 付きでキャッシュする（失敗はキャッシュしない）。 */
+function epochReader(deps: AuthDeps, name: string): () => Promise<number> {
+  let cached: { value: number; at: number } | undefined;
+  return async () => {
+    const now = deps.now();
+    if (cached && now - cached.at < EPOCH_TTL_MS) return cached.value;
+    const value = await deps.getParameterVersion(name);
+    cached = { value, at: now };
+    return value;
+  };
+}
+
 /** secret を取得後キャッシュする getSecret ラッパ（失敗はキャッシュしない）。 */
 function cached(deps: AuthDeps): AuthDeps {
   const cache = new Map<string, Promise<string>>();
@@ -33,6 +48,7 @@ export function createHandler(
 ): (event: ApiEvent) => Promise<ApiResult> {
   const config = parseAuthConfig(env);
   const deps = cached(rawDeps);
+  const epoch = epochReader(deps, config.sessionEpochParam);
   const policy =
     config.mode === "cognito"
       ? policyFingerprint(config.cognito.provider, config.cognito.allow)
@@ -44,18 +60,25 @@ export function createHandler(
 
     if (path.startsWith(AUTH_PREFIX)) {
       if (config.mode === "cognito") {
-        const ctx = { config, sessionKey, deps };
+        const ctx = { config, sessionKey, deps, epoch };
         if (path === "/__flareon/auth/login") return cognitoLogin(event, ctx);
         if (path === "/__flareon/auth/callback") return cognitoCallback(event, ctx);
         if (path === "/__flareon/auth/logout") return cognitoLogout(event, ctx);
       } else {
-        if (path === PREVIEW_PATH) return previewLogin(event, { config, sessionKey, deps });
+        if (path === PREVIEW_PATH) return previewLogin(event, { config, sessionKey, deps, epoch });
         if (path === "/__flareon/auth/logout") return previewLogout();
       }
       return json(404, { error: "not_found" });
     }
 
-    const identity = readSession(event, sessionKey, config.mode, deps.now(), policy);
+    let current: number;
+    try {
+      current = await epoch();
+    } catch {
+      // 失効の確認ができないときは通さない（fail closed）
+      return json(503, { error: "session_epoch_unavailable" });
+    }
+    const identity = readSession(event, sessionKey, config.mode, deps.now(), policy, current);
     if (!identity) {
       if (config.mode === "preview") {
         return isBrowserNavigation(event) ? previewFormPage() : unauthorized();

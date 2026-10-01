@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { devCommand } from "../../src/dev/session.js";
+import { appEnv, devCommand, newDevSecret } from "../../src/dev/session.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -79,5 +79,18 @@ describe("devCommand: typescript", () => {
     await expect(devCommand("typescript", dir, 1, { which: () => undefined })).rejects.toThrow(
       /missing/,
     );
+  });
+});
+
+describe("appEnv", () => {
+  it("binds the app to loopback and hands it the per-session dev secret", () => {
+    const env = appEnv({ HOST: "0.0.0.0", PORT: "1", A: "b" }, 4567, "sekrit");
+    expect(env).toEqual({ A: "b", PORT: "4567", HOST: "127.0.0.1", FLAREON_DEV_SECRET: "sekrit" });
+  });
+
+  it("newDevSecret is random and long enough", () => {
+    const a = newDevSecret();
+    expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(newDevSecret()).not.toBe(a);
   });
 });

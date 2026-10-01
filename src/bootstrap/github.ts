@@ -124,6 +124,13 @@ function rolePolicy(account: string, region: string, qualifier: string): iam.Pol
         },
       },
     }),
+    // deploy は外部 IdP（google / oidc / entra）の stage で資格情報の有無を先に確認する（値は読まない）。
+    // 名前は flareon/<app>/<stage>/auth/<NAME>（末尾の * は Secrets Manager の ARN のランダムサフィックス）
+    new iam.PolicyStatement({
+      sid: "DescribeIdpCredentials",
+      actions: ["secretsmanager:DescribeSecret"],
+      resources: [`arn:aws:secretsmanager:${region}:${account}:secret:flareon/*/auth/*`],
+    }),
     // flareon logs。Flareon の Lambda のロググループは CloudFormation の自動命名（スタック名 flareon-... で始まる）。
     // StartLiveTail はロググループ ARN（末尾 :* なし）、FilterLogEvents は :* 付きで評価されるので両方を書く
     new iam.PolicyStatement({

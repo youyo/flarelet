@@ -14,4 +14,10 @@ app.get("/", (c) =>
   }),
 );
 
-serve({ fetch: app.fetch, port: Number(process.env.PORT ?? 8080) });
+// Lambda では Lambda Web Adapter が 127.0.0.1 にアクセスし、flareon dev は HOST=127.0.0.1 を渡す。
+// 全インターフェースで listen すると、同じネットワークから identity ヘッダを偽装して直接アクセスできてしまう
+serve({
+  fetch: app.fetch,
+  port: Number(process.env.PORT ?? 8080),
+  hostname: process.env.HOST ?? "127.0.0.1",
+});

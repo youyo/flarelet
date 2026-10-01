@@ -151,6 +151,22 @@ describe.runIf(ENABLED)("real AWS: bootstrap github", () => {
       expect(await decide(arn!, sm, secret, { "flareon:stage": "prod" })).not.toBe("allowed");
       expect(await decide(arn!, sm, secret, { "flareon:stage": "preview" })).not.toBe("allowed");
       expect(await decide(arn!, sm, secret, { "flareon:app": "x" })).not.toBe("allowed");
+      // deploy が外部 IdP の資格情報の有無を確認する DescribeSecret は flareon/<app>/<stage>/auth/* だけ（値は読めない）
+      const smArn = (n: string) => `arn:aws:secretsmanager:${REGION}:${acct}:secret:${n}`;
+      const ds = "secretsmanager:DescribeSecret";
+      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf"))).toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/auth/ENTRA_CLIENT_SECRET"))).toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/secrets/X-AbCdEf"))).not.toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, ds, smArn("other/myapp/prod/auth/X-AbCdEf"))).not.toBe("allowed");
+      expect(
+        await decide(arn!, sm, smArn("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf")),
+      ).not.toBe("allowed");
       const stackArn = (n: string) =>
         `arn:aws:cloudformation:${REGION}:${acct}:stack/${n}/00000000-0000-0000-0000-000000000000`;
       const delStack = "cloudformation:DeleteStack";

@@ -174,6 +174,22 @@ describe("synthGithubBootstrap", () => {
     });
   });
 
+  it("can check (not read) the external IdP credentials before deploying", async () => {
+    const { tpl } = await synth(false);
+    const t = await tpl("flareon-bootstrap-github-youyo-flareon");
+    const [policy] = byType(t, "AWS::IAM::Policy");
+    const stmts: any[] = policy.Properties.PolicyDocument.Statement;
+    const describe = stmts.find((s) => s.Sid === "DescribeIdpCredentials");
+    // deploy は外部 IdP の資格情報（Secrets Manager flareon/<app>/<stage>/auth/<NAME>）の有無を DescribeSecret で確認する
+    expect(describe.Action).toBe("secretsmanager:DescribeSecret");
+    expect(describe.Resource).toBe(
+      "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:flareon/*/auth/*",
+    );
+    // 値（GetSecretValue）は PR preview のシークレットだけ
+    const values = stmts.filter((s) => [s.Action].flat().includes("secretsmanager:GetSecretValue"));
+    expect(values.map((s) => s.Sid)).toEqual(["ReadPreviewTokens"]);
+  });
+
   it("reads only Flareon's Lambda log groups", async () => {
     const { tpl } = await synth(false);
     const t = await tpl("flareon-bootstrap-github-youyo-flareon");

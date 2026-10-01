@@ -89,6 +89,13 @@ export class FakeCloud implements Cloud {
       .filter(([n]) => n.startsWith(path))
       .map(([name, p]) => ({ name, lastModified: p.lastModified }));
   }
+  async rotateParameter(name: string) {
+    this.calls.push(`rotateParameter:${name}`);
+    const p = this.params.get(name);
+    if (!p) return false;
+    this.params.set(name, { value: `rotated-${this.calls.length}`, lastModified: new Date(0) });
+    return true;
+  }
   async deleteParameter(name: string) {
     this.calls.push(`deleteParameter:${name}`);
     return this.params.delete(name);

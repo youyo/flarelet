@@ -51,6 +51,12 @@ describe("runInit", () => {
     expect(await readFile(join(dir, ".gitignore"), "utf8")).toContain(".flareon/");
   });
 
+  it("tells how to install the AI agent skill", async () => {
+    const t = io();
+    await runInit({ dir, runtime: "python" }, t.io);
+    expect(t.out.join("\n")).toContain("flareon skill install");
+  });
+
   it("scaffolds a typescript project (Hono)", async () => {
     const code = await runInit({ dir, runtime: "typescript" }, io().io);
     expect(code).toBe(0);

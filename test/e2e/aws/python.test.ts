@@ -5,6 +5,7 @@ import {
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
+  DescribeUserPoolCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +13,7 @@ import { SESSION_COOKIE } from "../../../src/auth/session.js";
 import {
   cli,
   ENABLED,
+  eventually,
   forceCleanup,
   get,
   leftoversSettled,
@@ -192,7 +194,13 @@ git:
       expect(list.stdout).toMatch(new RegExp(`${email.replace(/\./g, "\\.")}\\s+CONFIRMED`));
 
       const who = (await signIn(urls.v1!, "/whoami")) as Record<string, string>;
-      expect(who).toMatchObject({ email, mode: "cognito", version: "v1" });
+      // F1: Cognito の email_verified がアプリに渡る（招待ユーザーは検証済み）
+      expect(who).toMatchObject({ email, email_verified: "true", mode: "cognito", version: "v1" });
+      // F1: cognito ネイティブのプールは新しい email を検証が済むまで反映しない
+      const desc = await idp.send(new DescribeUserPoolCommand({ UserPoolId: pool }));
+      expect(
+        desc.UserPool?.UserAttributeUpdateSettings?.AttributesRequireVerificationBeforeUpdate,
+      ).toEqual(["email"]);
       expect(who.sub).toBeTruthy();
       // PoC1（python）: 認証済みで / が 200
       const index = await call(urls.v1!, "get", "/");
@@ -342,6 +350,46 @@ git:
     LONG,
   );
 
+  /** API（非ブラウザ）としてのアクセスの状態。セッションが失効すると 401。 */
+  const apiStatus = async (url: string) =>
+    (await ctx.request.get(`${url}/whoami`, { headers: { accept: "application/json" } })).status();
+
+  /** front のセッション世代のキャッシュ（60 秒・コンテナごと）が切れて 200 以外になるまで待つ。 */
+  const untilSignedOut = (url: string) =>
+    eventually(
+      async () => {
+        const s = await apiStatus(url);
+        return s === 200 ? undefined : s;
+      },
+      150_000,
+      5_000,
+    );
+
+  it(
+    "F4: auth revoke-sessions signs out existing sessions of the stage (all versions)",
+    async () => {
+      expect(await apiStatus(urls.v1!)).toBe(200);
+      expect(await apiStatus(urls.v2!)).toBe(200);
+      const r = await cli(["auth", "revoke-sessions", "--stage", "prod"], dir);
+      expect(r.code, r.stderr).toBe(0);
+      expect(r.stdout).toContain("Revoked all sessions of prod");
+      expect(await untilSignedOut(urls.v1!)).toBe(401);
+      expect(await untilSignedOut(urls.v2!)).toBe(401);
+      // ブラウザはサインインへ 302
+      const nav = await ctx.request.get(`${urls.v1!}/whoami`, {
+        headers: { accept: "text/html" },
+        maxRedirects: 0,
+      });
+      expect(nav.status()).toBe(302);
+      expect(nav.headers()["location"]).toContain("/__flareon/auth/login");
+      // サインインし直せば使える（Cognito 側のセッションでフォームは出ない）
+      const who = (await signIn(urls.v1!, "/whoami")) as Record<string, string>;
+      expect(who).toMatchObject({ email, version: "v1" });
+      expect(await apiStatus(urls.v1!)).toBe(200);
+    },
+    LONG,
+  );
+
   it(
     "destroying a version keeps the stage resources; --stage-resources needs --yes",
     async () => {
@@ -363,6 +411,9 @@ git:
 
       const rm = await cli(["auth", "user", "remove", email, "--stage", "prod"], dir);
       expect(rm.code, rm.stderr).toBe(0);
+      // F4: 削除したユーザーの既存セッションも止まる
+      expect(rm.stdout).toMatch(/Signed out every session of prod/);
+      expect(await untilSignedOut(urls.v1!)).toBe(401);
     },
     LONG,
   );

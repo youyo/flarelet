@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from "../../../src/auth/session.js";
 import {
   cli,
   ENABLED,
+  eventually,
   forceCleanup,
   get,
   leftoversSettled,
@@ -28,6 +29,7 @@ describe.runIf(ENABLED)("real AWS: PR preview", () => {
   const stack = `flareon-${app}-preview-pr-1`;
   let dir: string;
   let url: string;
+  let cookie: string;
 
   beforeAll(async () => {
     dir = await prepareApp(
@@ -97,7 +99,7 @@ database: { main: {} }
       expect(res.status).toBe(302);
       const cookies = res.headers.getSetCookie();
       expect(cookies.length).toBeGreaterThan(0);
-      const cookie = cookies.map((c) => c.split(";")[0]).join("; ");
+      cookie = cookies.map((c) => c.split(";")[0]).join("; ");
 
       const who = await get(`${url}/whoami`, { cookie });
       expect(who.status).toBe(200);
@@ -108,6 +110,34 @@ database: { main: {} }
 
       const list = await cli(["env", "list"], dir);
       expect(list.stdout).toMatch(/preview\s+pr-1\s+ephemeral\s+-\s+ready/);
+    },
+    LONG,
+  );
+
+  it(
+    "auth revoke-sessions --pr 1 signs out existing preview sessions",
+    async () => {
+      expect((await get(`${url}/whoami`, { cookie })).status).toBe(200);
+      const r = await cli(["auth", "revoke-sessions", "--pr", "1"], dir);
+      expect(r.code, r.stderr).toBe(0);
+      expect(r.stdout).toContain("Revoked all sessions of preview/pr-1");
+      // front はセッション世代を 60 秒キャッシュする（コンテナごと）
+      const status = await eventually(
+        async () => {
+          const s = (await get(`${url}/whoami`, { cookie })).status;
+          return s === 200 ? undefined : s;
+        },
+        150_000,
+        5_000,
+      );
+      expect(status).toBe(401);
+      // 新しいマジックリンクで入り直せる
+      const link = (await cli(["env", "url", "--pr", "1", "--with-token"], dir)).stdout.trim();
+      const again = (await get(link)).headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .join("; ");
+      expect((await get(`${url}/whoami`, { cookie: again })).status).toBe(200);
     },
     LONG,
   );

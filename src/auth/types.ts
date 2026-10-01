@@ -32,8 +32,15 @@ export interface ApiResult {
 export interface Identity {
   sub: string;
   email?: string;
+  /**
+   * IdP が email を検証済みと示したか（id_token の email_verified）。entra は email_verified を出さないので常に false。
+   * 古いセッション（未保持）は false として扱う。
+   */
+  emailVerified?: boolean;
   /** 発行時の allow ポリシー（policyFingerprint）。ポリシーが無ければ undefined。 */
   policy?: string;
+  /** 発行時のセッション世代（SSM パラメータのバージョン）。世代が変わるとセッションは無効。 */
+  epoch?: number;
 }
 
 export type AuthMode = "cognito" | "preview";
@@ -48,6 +55,8 @@ export interface AuthDeps {
   /** 現在時刻（ミリ秒）。 */
   now(): number;
   getSecret(arn: string): Promise<string>;
+  /** セッション世代: SSM パラメータのバージョン（値の書き換えごとに単調増加する）。 */
+  getParameterVersion(name: string): Promise<number>;
   /** app Lambda を RequestResponse で同期 Invoke する。 */
   invoke(functionName: string, payload: string): Promise<InvokeResult>;
   fetch: typeof fetch;

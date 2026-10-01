@@ -29,8 +29,15 @@ export const bindings = {
 };
 
 export interface Identity {
+  /** IdP 上のユーザー ID。認可・ユーザーの紐付けにはこれを使う。 */
   sub: string;
+  /**
+   * IdP が返した email。検証済みとは限らない（cognito ネイティブ以外では IdP 側で自由に設定できることがある）。
+   * email で認可・紐付けをするなら emailVerified が true のときだけ使うこと。
+   */
   email: string | undefined;
+  /** email が IdP で検証済みか（id_token の email_verified）。Entra ID は常に false。 */
+  emailVerified: boolean;
   authMode: string | undefined;
 }
 
@@ -44,18 +51,33 @@ function header(h: HeaderBag, name: string): string | undefined {
   return undefined;
 }
 
+/** 長さ以外の情報を漏らさない比較（node:crypto に依存しない）。 */
+function sameSecret(given: string | undefined, expected: string): boolean {
+  if (given === undefined || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
 /**
  * Flareon front auth が付与する x-flareon-* ヘッダからユーザーを取り出す。未認証なら null。
- * `http.auth: false`（FLAREON_AUTH_ENABLED=false）では front auth が無くクライアントのヘッダがそのまま届くので、
- * ヘッダに関わらず常に null を返す。
+ * - `http.auth: false`（FLAREON_AUTH_ENABLED=false）では front auth が無くクライアントのヘッダがそのまま届くので、
+ *   ヘッダに関わらず常に null を返す。
+ * - `flareon dev`（FLAREON_DEV_SECRET が設定されている）では、dev プロキシが付けた秘密ヘッダ
+ *   `x-flareon-dev-secret` が一致するときだけ identity を返す（プロキシを経由せずアプリに直接届いたリクエストを信用しない）。
+ *
+ * 認可・ユーザーの紐付けには `sub` を使う。`email` を使う場合は `emailVerified` を確認すること。
  */
 export function identity(headers: HeaderBag, env: Env = process.env): Identity | null {
   if (env.FLAREON_AUTH_ENABLED === "false") return null;
+  const devSecret = env.FLAREON_DEV_SECRET;
+  if (devSecret && !sameSecret(header(headers, "x-flareon-dev-secret"), devSecret)) return null;
   const sub = header(headers, "x-flareon-user-sub");
   if (!sub) return null;
   return {
     sub,
     email: header(headers, "x-flareon-user-email"),
+    emailVerified: header(headers, "x-flareon-user-email-verified") === "true",
     authMode: header(headers, "x-flareon-auth-mode"),
   };
 }

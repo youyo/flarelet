@@ -24,6 +24,8 @@ export interface CognitoContext {
   config: CognitoConfig;
   sessionKey: string;
   deps: AuthDeps;
+  /** 現在のセッション世代（発行するセッションに入れる）。 */
+  epoch: () => Promise<number>;
 }
 
 /** オープンリダイレクト防止: 同一オリジンのパス（/ 始まり、// や \ を含まない）のみ許可。 */
@@ -110,7 +112,12 @@ export async function verifyIdToken(
   idToken: string,
   nonce: string,
   ctx: CognitoContext,
-): Promise<{ sub: string; email?: string; claims: Record<string, unknown> }> {
+): Promise<{
+  sub: string;
+  email?: string;
+  emailVerified: boolean;
+  claims: Record<string, unknown>;
+}> {
   const { userPoolId, clientId } = ctx.config.cognito;
   const region = userPoolId.split("_")[0] ?? "";
   const getKey = ctx.deps.getVerificationKey ?? defaultKeyGetter(region, userPoolId);
@@ -126,9 +133,13 @@ export async function verifyIdToken(
   }
   if (typeof payload.sub !== "string") throw new Error("missing sub");
   const email = payload["email"];
+  // Entra ID の id_token は email_verified を出さない（DECISIONS.md）。entra では常に未検証として扱う
+  const emailVerified =
+    ctx.config.cognito.provider !== "entra" &&
+    (payload["email_verified"] === true || payload["email_verified"] === "true");
   return typeof email === "string"
-    ? { sub: payload.sub, email, claims: payload }
-    : { sub: payload.sub, claims: payload };
+    ? { sub: payload.sub, email, emailVerified, claims: payload }
+    : { sub: payload.sub, emailVerified: false, claims: payload };
 }
 
 export async function cognitoCallback(event: ApiEvent, ctx: CognitoContext): Promise<ApiResult> {
@@ -182,9 +193,18 @@ export async function cognitoCallback(event: ApiEvent, ctx: CognitoContext): Pro
     );
   }
   const policy = policyFingerprint(provider, allow);
+  let epoch: number;
+  try {
+    epoch = await ctx.epoch();
+  } catch {
+    return bad(503, "session_epoch_unavailable");
+  }
   const session = {
+    epoch,
     sub: identity.sub,
-    ...(identity.email !== undefined ? { email: identity.email } : {}),
+    ...(identity.email !== undefined
+      ? { email: identity.email, emailVerified: identity.emailVerified }
+      : {}),
     ...(policy !== undefined ? { policy } : {}),
   };
   return redirect(sanitizeReturnTo(typeof returnTo === "string" ? returnTo : "/"), [

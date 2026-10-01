@@ -337,10 +337,16 @@ describe("persistent stage: version stack", () => {
     expect(res).toContain("foundation-model/amazon.nova-micro-v1:0");
     expect(res).not.toContain("claude-opus");
 
+    // app: secrets パスの GetParametersByPath、front: セッション世代のパラメータ 1 つの GetParameter だけ
     const ssm = all.filter((s) => [s.Action].flat().some((a) => a.startsWith("ssm:")));
-    expect(ssm).toHaveLength(1);
-    expect(ssm[0]!.Action).toBe("ssm:GetParametersByPath");
-    expect(JSON.stringify(ssm[0]!.Resource)).toContain("parameter/flareon/myapp/prod/secrets");
+    expect(ssm).toHaveLength(2);
+    const byPath = ssm.find((s) => s.Action === "ssm:GetParametersByPath")!;
+    expect(JSON.stringify(byPath.Resource)).toContain("parameter/flareon/myapp/prod/secrets");
+    const epoch = ssm.find((s) => s.Action === "ssm:GetParameter")!;
+    expect(JSON.stringify(epoch.Resource)).toContain(
+      "parameter/flareon/myapp/prod/auth/session-epoch",
+    );
+    expect(JSON.stringify(epoch.Resource)).not.toContain("*");
 
     const kms = all.filter((s) => [s.Action].flat().some((a) => a.startsWith("kms:")));
     expect(kms).toHaveLength(1);

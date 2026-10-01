@@ -1,5 +1,6 @@
 import type { Cloud } from "../aws/cloud.js";
-import { stackNames } from "../constructs/names.js";
+import { sessionEpochParam, stackNames } from "../constructs/names.js";
+import { effectiveAuth } from "../ir/index.js";
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { resolveTarget, type SynthArgs } from "./synth.js";
 
@@ -12,12 +13,21 @@ export interface UserArgs extends SynthArgs {
   email: string;
 }
 
+/** front Lambda がセッション世代をキャッシュする時間（src/auth/router.ts の EPOCH_TTL_MS）。 */
+const EPOCH_DELAY = "60 seconds";
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function userPool(
   args: SynthArgs,
   deps: OpsDeps,
-): Promise<{ cloud: Cloud; pool: string; stage: string; provider: string } | null> {
+): Promise<{
+  cloud: Cloud;
+  pool: string;
+  stage: string;
+  provider: string;
+  epochParam: string;
+} | null> {
   const t = await resolveTarget(args, deps);
   if (!t) return null;
   const { io } = deps;
@@ -40,7 +50,13 @@ async function userPool(
     );
     return null;
   }
-  return { cloud, pool, stage: t.deployment.stage, provider: t.ir.http.auth.provider };
+  return {
+    cloud,
+    pool,
+    stage: t.deployment.stage,
+    provider: t.ir.http.auth.provider,
+    epochParam: sessionEpochParam(t.ir.name, t.deployment),
+  };
 }
 
 export async function runUserAdd(args: UserArgs, deps: OpsDeps): Promise<number> {
@@ -100,6 +116,48 @@ export async function runUserRemove(args: UserArgs, deps: OpsDeps): Promise<numb
       return 1;
     }
     deps.io.stdout(`Removed ${args.email} from ${p.stage}`);
+    // 削除したユーザーの Flareon セッション（Cookie、最長 8 時間）も止める。全員のセッションが失効する
+    if (await p.cloud.rotateParameter(p.epochParam)) {
+      deps.io.stdout(
+        `Signed out every session of ${p.stage} (takes effect within ${EPOCH_DELAY}); other users sign in again`,
+      );
+    } else {
+      deps.io.stderr(
+        `Warning: ${p.stage} was deployed before session revocation existed, so existing sessions stay valid until they expire; run flareon deploy`,
+      );
+    }
+    return 0;
+  } catch (e) {
+    deps.io.stderr(`Error: ${errorMessage(e)}`);
+    return 1;
+  }
+}
+
+/**
+ * `flareon auth revoke-sessions`: その環境の Flareon セッション（Cookie）をすべて失効させる。
+ * セッション世代（SSM パラメータ）を書き換え、front Lambda がキャッシュを更新した時点（最大 60 秒）で効く。
+ */
+export async function runRevokeSessions(args: SynthArgs, deps: OpsDeps): Promise<number> {
+  try {
+    const t = await resolveTarget(args, deps);
+    if (!t) return 1;
+    const { io } = deps;
+    const eff = effectiveAuth(t.ir, t.deployment);
+    if (!eff || eff.kind === "none") {
+      io.stderr("Error: authentication is disabled for this app (http.auth: false)");
+      return 1;
+    }
+    const label = `${t.deployment.stage}${t.deployment.lifecycle === "ephemeral" ? `/${t.deployment.version}` : ""}`;
+    const name = sessionEpochParam(t.ir.name, t.deployment);
+    if (!(await deps.cloud(t.region).rotateParameter(name))) {
+      io.stderr(
+        `Error: ${t.ir.name} (${label}) is not deployed, or was deployed before session revocation existed; run flareon deploy`,
+      );
+      return 1;
+    }
+    io.stdout(
+      `Revoked all sessions of ${label} (takes effect within ${EPOCH_DELAY}); users sign in again`,
+    );
     return 0;
   } catch (e) {
     deps.io.stderr(`Error: ${errorMessage(e)}`);

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { accessSync, constants, existsSync, watch } from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
@@ -80,6 +81,23 @@ export function freePort(): Promise<number> {
   });
 }
 
+/** プロキシとアプリで共有するセッションごとの秘密（表示しない）。 */
+export function newDevSecret(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * アプリに渡す環境変数。HOST=127.0.0.1 でループバックだけで listen させ（TypeScript のテンプレートは HOST を読む）、
+ * FLAREON_DEV_SECRET で flareon/runtime の identity() がプロキシ経由のリクエストだけを信用できるようにする。
+ */
+export function appEnv(
+  base: Record<string, string>,
+  appPort: number,
+  secret: string,
+): Record<string, string> {
+  return { ...base, PORT: String(appPort), HOST: "127.0.0.1", FLAREON_DEV_SECRET: secret };
+}
+
 const realSupervisorDeps: SupervisorDeps = {
   spawn: (cmd, args, opts) =>
     spawn(cmd, args, { ...opts, stdio: ["ignore", "inherit", "inherit"] }),
@@ -94,16 +112,18 @@ const realSupervisorDeps: SupervisorDeps = {
 /** プロキシ（利用者のポート）→ アプリ（内部ポート）。アプリはファイル変更で再起動する。 */
 export async function startLocal(o: LocalOptions): Promise<LocalSession> {
   const appPort = await freePort();
+  const secret = newDevSecret();
   const proxy = await startProxy({
     port: o.port,
     targetPort: appPort,
+    secret,
     ...(o.as ? { identity: o.as } : {}),
   });
   const supervisor = createSupervisor(
     {
       watchDir: join(o.appDir, "app"),
       command: () => devCommand(o.language, o.appDir, appPort),
-      env: { ...o.env, PORT: String(appPort) },
+      env: appEnv(o.env, appPort, secret),
       log: o.log,
     },
     realSupervisorDeps,

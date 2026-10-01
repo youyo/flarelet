@@ -2,6 +2,7 @@
 // FLAREON_OFFLINE=1 なので AWS には接続しない（バインディングは offline 表示）。
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
@@ -33,8 +34,11 @@ createServer((req, res) => {
     dev: process.env.FLAREON_DEV ?? null,
     email: req.headers["x-flareon-user-email"] ?? null,
     mode: req.headers["x-flareon-auth-mode"] ?? null,
+    host: process.env.HOST ?? null,
+    secret: process.env.FLAREON_DEV_SECRET ?? null,
+    secretHeader: req.headers["x-flareon-dev-secret"] ?? null,
   }));
-}).listen(Number(process.env.PORT));
+}).listen(Number(process.env.PORT), process.env.HOST);
 `;
 
 function freePort(): Promise<number> {
@@ -78,6 +82,18 @@ async function until<T>(fn: () => Promise<T | undefined> | T | undefined, ms = 2
     if (Date.now() > end) throw new Error(`timed out${last ? `: ${String(last)}` : ""}`);
     await new Promise((r) => setTimeout(r, 100));
   }
+}
+
+/** fetch では Host / Origin を自由に付けられないので node:http で送る。 */
+function rawGet(port: number, headers: Record<string, string>): Promise<number> {
+  return new Promise((res, rej) => {
+    const req = request({ host: "127.0.0.1", port, path: "/", headers, setHost: false }, (r) => {
+      r.resume();
+      r.on("end", () => res(r.statusCode ?? 0));
+    });
+    req.on("error", rej);
+    req.end();
+  });
 }
 
 const getJson = async (url: string, headers: Record<string, string> = {}) =>
@@ -163,6 +179,43 @@ describe("flareon dev (offline)", () => {
     expect(r.out()).toMatch(/Identity\s+alice@example\.com/);
     const j = await until(() => getJson(`http://localhost:${port}/`));
     expect(j).toMatchObject({ email: "alice@example.com", mode: "dev" });
+  }, 60_000);
+
+  it("binds the app to loopback and vouches for the proxy with a per-session secret", async () => {
+    const port = await freePort();
+    running = startDev(["--port", String(port), "--as", "alice@example.com"], dir);
+    const r = running;
+    await until(() => (r.out().includes("Watching...") ? true : undefined));
+    const j = await until(() => getJson(`http://localhost:${port}/`));
+    // TypeScript アプリには HOST=127.0.0.1 を渡す（全インターフェースで listen させない）
+    expect(j.host).toBe("127.0.0.1");
+    // プロキシ経由のリクエストにだけ、アプリの FLAREON_DEV_SECRET と同じ秘密ヘッダが付く
+    expect(j.secret).toMatch(/^[A-Za-z0-9_-]{32,}$/);
+    expect(j.secretHeader).toBe(j.secret);
+    expect(r.out()).not.toContain(j.secret!);
+  }, 60_000);
+
+  it("refuses requests whose Host is not loopback (DNS rebinding)", async () => {
+    const port = await freePort();
+    running = startDev(["--port", String(port)], dir);
+    const r = running;
+    await until(() => (r.out().includes("Watching...") ? true : undefined));
+    await until(() => getJson(`http://localhost:${port}/`));
+    expect(await rawGet(port, { host: "attacker.example.com" })).toBe(403);
+    expect(await rawGet(port, { host: `attacker.example.com:${port}` })).toBe(403);
+    expect(await rawGet(port, { host: `localhost:${port}` })).toBe(200);
+  }, 60_000);
+
+  it("--as refuses cross-site requests (CSRF)", async () => {
+    const port = await freePort();
+    running = startDev(["--port", String(port), "--as", "alice@example.com"], dir);
+    const r = running;
+    await until(() => (r.out().includes("Watching...") ? true : undefined));
+    await until(() => getJson(`http://localhost:${port}/`));
+    const host = `localhost:${port}`;
+    expect(await rawGet(port, { host, origin: "https://attacker.example.com" })).toBe(403);
+    expect(await rawGet(port, { host, "sec-fetch-site": "cross-site" })).toBe(403);
+    expect(await rawGet(port, { host, origin: `http://${host}` })).toBe(200);
   }, 60_000);
 
   it("keeps running and recovers after a build error", async () => {

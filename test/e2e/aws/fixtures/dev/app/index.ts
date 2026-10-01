@@ -41,4 +41,4 @@ createServer((req, res) => {
     version: process.env.FLAREON_VERSION,
     bucket: process.env.FLAREON_STORAGE_FILES_BUCKET,
   });
-}).listen(Number(process.env.PORT));
+}).listen(Number(process.env.PORT), process.env.HOST ?? "127.0.0.1");

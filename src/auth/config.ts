@@ -5,6 +5,8 @@ interface Base {
   mode: AuthMode;
   appFunctionName: string;
   sessionSecretArn: string;
+  /** セッション世代の SSM パラメータ名（flareon auth revoke-sessions で更新する）。 */
+  sessionEpochParam: string;
 }
 
 export interface CognitoConfig extends Base {
@@ -64,6 +66,7 @@ export function parseAuthConfig(env: Env): AuthConfig {
   const base = {
     appFunctionName: required(env, "FLAREON_APP_FUNCTION_NAME"),
     sessionSecretArn: required(env, "FLAREON_SESSION_SECRET_ARN"),
+    sessionEpochParam: required(env, "FLAREON_SESSION_EPOCH_PARAM"),
   };
   if (mode === "preview") {
     return {

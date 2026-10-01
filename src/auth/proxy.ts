@@ -30,6 +30,9 @@ export function buildAppEvent(event: ApiEvent, identity: Identity, mode: AuthMod
   }
   headers["x-flareon-user-sub"] = identity.sub;
   if (identity.email !== undefined) headers["x-flareon-user-email"] = identity.email;
+  // email は IdP 由来の値で、検証済みとは限らない。認可・ユーザー紐付けは sub を使い、email を使うならこれを確認する
+  headers["x-flareon-user-email-verified"] =
+    identity.email !== undefined && identity.emailVerified === true ? "true" : "false";
   headers["x-flareon-auth-mode"] = mode;
   const out: ApiEvent = { ...event, headers };
   if (event.cookies) out.cookies = stripSession(event.cookies);

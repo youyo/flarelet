@@ -1,11 +1,13 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { createHandler } from "./router.js";
 import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
 function realDeps(): AuthDeps {
   const lambda = new LambdaClient({});
   const secrets = new SecretsManagerClient({});
+  const ssm = new SSMClient({});
   return {
     now: () => Date.now(),
     fetch: (input, init) => fetch(input, init),
@@ -13,6 +15,12 @@ function realDeps(): AuthDeps {
       const out = await secrets.send(new GetSecretValueCommand({ SecretId: arn }));
       if (out.SecretString === undefined) throw new Error(`secret ${arn} has no SecretString`);
       return out.SecretString;
+    },
+    async getParameterVersion(name) {
+      const out = await ssm.send(new GetParameterCommand({ Name: name }));
+      const v = out.Parameter?.Version;
+      if (typeof v !== "number") throw new Error(`parameter ${name} has no version`);
+      return v;
     },
     async invoke(functionName, payload) {
       const out = await lambda.send(

@@ -52,6 +52,10 @@ run = "playwright install chromium"
 description = "Unit + E2E"
 depends = ["test:unit", "test:e2e"]
 
+[tasks."pack:check"]
+description = "npm パッケージの同梱物を確認（npm pack --dry-run）"
+run = "npm pack --dry-run"
+
 [tasks.lint]
 description = "ESLint + Prettier チェック"
 run = ["eslint .", "prettier --check ."]

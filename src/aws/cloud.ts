@@ -70,6 +70,11 @@ export interface Cloud {
   listParameters(path: string): Promise<ParameterInfo[]>;
   /** 無ければ false。 */
   deleteParameter(name: string): Promise<boolean>;
+  /**
+   * 既存の String パラメータの値を新しいランダム値に書き換える（バージョンが進む）。無ければ作らず false。
+   * セッション世代（flareon auth revoke-sessions）に使う。
+   */
+  rotateParameter(name: string): Promise<boolean>;
   /** 関数の環境変数に vars をマージし、更新完了まで待つ（新しいコールドスタートを強制する）。 */
   updateFunctionEnv(name: string, vars: Record<string, string>): Promise<void>;
   filterLogs(

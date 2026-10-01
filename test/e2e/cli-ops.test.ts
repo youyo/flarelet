@@ -111,6 +111,18 @@ describe("operational commands (no AWS)", () => {
     expect(r.stderr).toContain("--since");
   });
 
+  it("auth revoke-sessions is available with the target options", async () => {
+    const auth = await run(["auth", "--help"], dir);
+    expect(auth.stdout).toMatch(/revoke-sessions/);
+    const help = await run(["auth", "revoke-sessions", "--help"], dir);
+    expect(help.code).toBe(0);
+    for (const o of ["--stage", "--version", "--pr"]) expect(help.stdout).toContain(o);
+    // 無効な認証情報なので AWS 呼び出しで失敗する（引数は解釈され、黙って成功しない）
+    const r = await run(["auth", "revoke-sessions", "--stage", "prod"], dir);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/Error/);
+  });
+
   it("auth user add validates the email", async () => {
     const r = await run(["auth", "user", "add", "not-an-email", "--stage", "prod"], dir);
     expect(r.code).toBe(1);

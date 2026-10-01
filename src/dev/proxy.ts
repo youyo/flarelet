@@ -18,6 +18,11 @@ export interface ProxyOptions {
   host?: string;
   targetPort: number;
   identity?: string;
+  /**
+   * 転送するリクエストに付ける `x-flareon-dev-secret`。アプリ側（flareon/runtime の identity()）は
+   * FLAREON_DEV_SECRET と一致するときだけ identity ヘッダを信用する（プロキシを経由しない直接アクセス対策）。
+   */
+  secret?: string;
   /** アプリが応答するまで待つ時間。 */
   waitMs?: number;
 }
@@ -29,20 +34,55 @@ export interface DevProxy {
 
 const RETRYABLE = new Set(["ECONNREFUSED", "ECONNRESET", "EPIPE"]);
 
+export const DEV_SECRET_HEADER = "x-flareon-dev-secret";
+
 export function identityHeaders(email: string): Record<string, string> {
   return {
     "x-flareon-user-email": email,
+    // 利用者が自分で指定した擬似ユーザーなので検証済みとして扱う
+    "x-flareon-user-email-verified": "true",
     "x-flareon-user-sub": `dev:${email}`,
     "x-flareon-auth-mode": "dev",
   };
 }
 
-function forwardHeaders(h: IncomingHttpHeaders, identity: string | undefined): IncomingHttpHeaders {
+function forwardHeaders(
+  h: IncomingHttpHeaders,
+  identity: string | undefined,
+  secret: string | undefined,
+): IncomingHttpHeaders {
   const out: IncomingHttpHeaders = {};
   for (const [k, v] of Object.entries(h)) {
     if (!k.toLowerCase().startsWith("x-flareon-")) out[k] = v;
   }
-  return identity ? { ...out, ...identityHeaders(identity) } : out;
+  if (identity) Object.assign(out, identityHeaders(identity));
+  if (secret) out[DEV_SECRET_HEADER] = secret;
+  return out;
+}
+
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/;
+
+/**
+ * DNS rebinding 対策: ブラウザは攻撃者のドメイン名を Host に入れて送ってくるので、ループバックの名前以外は拒否する。
+ */
+export function isLoopbackHost(host: string | undefined): boolean {
+  return host !== undefined && LOOPBACK_HOST.test(host.trim().toLowerCase());
+}
+
+/**
+ * `--as` では擬似 identity が付くので、他サイトのページからのリクエスト（CSRF）を拒否する。
+ * Origin があれば自オリジン（http://<Host>）と一致すること、Sec-Fetch-Site が cross-site でないこと。
+ */
+export function isCrossSite(h: IncomingHttpHeaders): boolean {
+  if (h["sec-fetch-site"]?.toLowerCase() === "cross-site") return true;
+  const origin = h["origin"];
+  if (origin === undefined) return false;
+  return origin.toLowerCase() !== `http://${(h["host"] ?? "").trim().toLowerCase()}`;
+}
+
+function forbid(res: ServerResponse, why: string): void {
+  res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+  res.end(`Flareon dev: ${why}\n`);
 }
 
 function sendOnce(
@@ -70,8 +110,16 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
 export function startProxy(o: ProxyOptions): Promise<DevProxy> {
   const waitMs = o.waitMs ?? 15_000;
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (!isLoopbackHost(req.headers.host)) {
+      forbid(res, "requests must be addressed to localhost, 127.0.0.1 or [::1]");
+      return;
+    }
+    if (o.identity && isCrossSite(req.headers)) {
+      forbid(res, "cross-site requests are refused while --as simulates a signed-in user");
+      return;
+    }
     const body = await readBody(req);
-    const headers = forwardHeaders(req.headers, o.identity);
+    const headers = forwardHeaders(req.headers, o.identity, o.secret);
     const deadline = Date.now() + waitMs;
     for (;;) {
       try {

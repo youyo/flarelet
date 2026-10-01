@@ -8,7 +8,13 @@ export {
   type BuildOptions,
   type BuiltApp,
 } from "./app.js";
-export { domainPrefix, idpSecretName, secretsPath, stackNames } from "./names.js";
+export {
+  domainPrefix,
+  idpSecretName,
+  secretsPath,
+  sessionEpochParam,
+  stackNames,
+} from "./names.js";
 export {
   AI_MODEL_NAMES,
   isKnownModel,

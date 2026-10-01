@@ -22,6 +22,7 @@ const AUTH = new Set([
   "Branding",
   "PreviewToken",
   "IdentityProvider",
+  "SessionEpoch",
 ]);
 const APPLICATION = new Set([
   "AppFunction",

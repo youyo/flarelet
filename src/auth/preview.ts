@@ -11,6 +11,8 @@ export interface PreviewContext {
   config: PreviewConfig;
   sessionKey: string;
   deps: AuthDeps;
+  /** 現在のセッション世代（発行するセッションに入れる）。 */
+  epoch: () => Promise<number>;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -53,8 +55,14 @@ export async function previewLogin(event: ApiEvent, ctx: PreviewContext): Promis
   if (token === undefined || token === "") return previewFormPage();
   const expected = await ctx.deps.getSecret(ctx.config.previewTokenSecretArn);
   if (!safeEqual(token, expected.trim())) return previewFormPage("Invalid token.");
+  let epoch: number;
+  try {
+    epoch = await ctx.epoch();
+  } catch {
+    return json(503, { error: "session_epoch_unavailable" });
+  }
   return redirect("/", [
-    issueSessionCookie(PREVIEW_IDENTITY, "preview", ctx.sessionKey, ctx.deps.now()),
+    issueSessionCookie({ ...PREVIEW_IDENTITY, epoch }, "preview", ctx.sessionKey, ctx.deps.now()),
   ]);
 }
 

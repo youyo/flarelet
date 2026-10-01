@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   CloudFormationClient,
   DeleteStackCommand,
@@ -49,6 +50,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import {
   DeleteParameterCommand,
+  GetParameterCommand,
   GetParametersByPathCommand,
   PutParameterCommand,
   SSMClient,
@@ -334,6 +336,25 @@ export function awsCloud(region: string): Cloud {
         token = page.NextToken;
       } while (token);
       return out;
+    },
+
+    async rotateParameter(name) {
+      try {
+        await ssm.send(new GetParameterCommand({ Name: name }));
+      } catch (e) {
+        if (errName(e) === "ParameterNotFound") return false;
+        throw e;
+      }
+      // 値は使わない（front はバージョンを見る）。書き換えでバージョンが進む
+      await ssm.send(
+        new PutParameterCommand({
+          Name: name,
+          Value: randomBytes(16).toString("hex"),
+          Type: "String",
+          Overwrite: true,
+        }),
+      );
+      return true;
     },
 
     async deleteParameter(name) {

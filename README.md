@@ -104,32 +104,50 @@ git: # 省略可。省略時は「デフォルトブランチ → prod/current�
 | `ai.models[]`     | `FLAREON_AI_<NAME>_MODEL_ID`    |
 | `secrets[]`       | 宣言した名前そのまま            |
 
-認証済みユーザーは `x-flareon-user-sub` / `x-flareon-user-email` ヘッダで渡ります（クライアントが付けた `x-flareon-*` は front auth が削除します）。TypeScript では `flareon/runtime` の `identity(headers)` で読めます。`auth: false` の stage ではアプリに `FLAREON_AUTH_ENABLED=false` が渡り、`identity()` は常に `null` を返します（「制約」を参照）。
+認証済みユーザーは `x-flareon-user-sub` / `x-flareon-user-email` / `x-flareon-user-email-verified`（`true` か `false`）ヘッダで渡ります（クライアントが付けた `x-flareon-*` は front auth が削除します）。TypeScript では `flareon/runtime` の `identity(headers)` で `sub` / `email` / `emailVerified` を読めます。`auth: false` の stage ではアプリに `FLAREON_AUTH_ENABLED=false` が渡り、`identity()` は常に `null` を返します（「制約」を参照）。
 
-アプリの規約: Python は `app/main.py` の `app`（ASGI）と `app/requirements.txt`、TypeScript は `app/index.ts` と `app/package.json`（`PORT` で listen、ポート 8080）。
+**認可・ユーザーの紐付けには `sub` を使ってください。** `email` は IdP から来た値で、検証済みとは限りません（OIDC などでは IdP 側で未検証のアドレスを設定できることがあります）。email を使う場合は `emailVerified`（ヘッダが `true`）のときだけにしてください。`emailVerified` は id_token の `email_verified` が true のときだけ true です（Entra ID は `email_verified` を出さないので常に `false`。PR プレビューは email が無いので `false`）。cognito（既定）の User Pool は、利用者が email を変更しても新しいアドレスの検証が済むまで元の email を保ちます。
+
+アプリの規約: Python は `app/main.py` の `app`（ASGI）と `app/requirements.txt`、TypeScript は `app/index.ts` と `app/package.json`（`PORT` で listen、ポート 8080）。TypeScript は `hostname: process.env.HOST ?? "127.0.0.1"` で listen してください（`flareon init` のテンプレートと同じ）。Lambda では Lambda Web Adapter が `127.0.0.1` にアクセスし、`flareon dev` は `HOST=127.0.0.1` を渡します。全インターフェースで listen すると、同じネットワークの他の端末がプロキシを経由せずアプリに直接届き、identity ヘッダを偽装できます。
 
 stage は小文字英数字とハイフン（16 文字まで）、version は 32 文字までです。
 
 ## CLI 一覧
 
-| コマンド                                                 | 内容                                                                                              |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `flareon init [dir] [--runtime python\|typescript]`      | `flareon.yaml`・スターターアプリ・GitHub Actions ワークフローを作成                               |
-| `flareon validate`                                       | `flareon.yaml` を検証                                                                             |
-| `flareon synth`                                          | CDK Cloud Assembly を `.flareon/out/` に生成（デバッグ用）                                        |
-| `flareon plan`                                           | デプロイ済みの状態と比較した変更を表示                                                            |
-| `flareon deploy [--ci]`                                  | デプロイして URL を表示                                                                           |
-| `flareon destroy [--stage-resources --yes] [--ci]`       | バージョンを削除。`--stage-resources` は stage の DB/ストレージ/ユーザー/シークレットまで完全削除 |
-| `flareon env list`                                       | デプロイ済みの stage / version を一覧                                                             |
-| `flareon env url [--with-token]`                         | URL を表示。PR プレビューは `--with-token` でトークン付きリンク                                   |
-| `flareon logs [--since 10m] [--follow]`                  | ログ表示。`--follow` は CloudWatch Logs Live Tail                                                 |
-| `flareon dev [--port 8787] [--as <email>]`               | ローカルで起動（ホットリロード）し、AWS の dev 用 DB/ストレージに接続                             |
-| `flareon secret set\|list\|delete`                       | シークレット管理（SSM SecureString。外部 IdP の資格情報は Secrets Manager）                       |
-| `flareon auth user add\|list\|remove <email>`            | Cognito ユーザー管理                                                                              |
-| `flareon github comment [--state ...] [--with-token]`    | PR コメントと GitHub Deployment を更新（CI 用）                                                   |
-| `flareon bootstrap github --repo owner/name [--destroy]` | GitHub Actions 用の AWS IAM ロールを作成／削除                                                    |
+| コマンド                                                    | 内容                                                                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `flareon init [dir] [--runtime python\|typescript]`         | `flareon.yaml`・スターターアプリ・GitHub Actions ワークフローを作成                               |
+| `flareon validate`                                          | `flareon.yaml` を検証                                                                             |
+| `flareon synth`                                             | CDK Cloud Assembly を `.flareon/out/` に生成（デバッグ用）                                        |
+| `flareon plan`                                              | デプロイ済みの状態と比較した変更を表示                                                            |
+| `flareon deploy [--ci]`                                     | デプロイして URL を表示                                                                           |
+| `flareon destroy [--stage-resources --yes] [--ci]`          | バージョンを削除。`--stage-resources` は stage の DB/ストレージ/ユーザー/シークレットまで完全削除 |
+| `flareon env list`                                          | デプロイ済みの stage / version を一覧                                                             |
+| `flareon env url [--with-token]`                            | URL を表示。PR プレビューは `--with-token` でトークン付きリンク                                   |
+| `flareon logs [--since 10m] [--follow]`                     | ログ表示。`--follow` は CloudWatch Logs Live Tail                                                 |
+| `flareon dev [--port 8787] [--as <email>]`                  | ローカルで起動（ホットリロード）し、AWS の dev 用 DB/ストレージに接続                             |
+| `flareon secret set\|list\|delete`                          | シークレット管理（SSM SecureString。外部 IdP の資格情報は Secrets Manager）                       |
+| `flareon auth user add\|list\|remove <email>`               | Cognito ユーザー管理。`remove` はその stage の全セッションも失効させる                            |
+| `flareon auth revoke-sessions`                              | その環境の Flareon セッションをすべて失効させる（最大 60 秒で反映）                               |
+| `flareon github comment [--state ...] [--with-token]`       | PR コメントと GitHub Deployment を更新（CI 用）                                                   |
+| `flareon bootstrap github --repo owner/name [--destroy]`    | GitHub Actions 用の AWS IAM ロールを作成／削除                                                    |
+| `flareon skill install [--global] [--dir <path>] [--force]` | AI エージェント向けスキルをインストール（「AI エージェント向けスキル」を参照）                    |
 
 デプロイ先を決める共通オプション: `-f/--file`、`--stage`、`--version`、`--branch`、`--pr`、`--default-branch`、`--region`。
+
+## AI エージェント向けスキル
+
+Claude Code などの AI エージェントが flareon CLI を安全に使うための [Agent Skill](https://docs.claude.com/en/docs/claude-code/skills) を同梱しています。ワークフロー・安全上のルール（`destroy --stage-resources` の確認、シークレットは stdin、`auth: false` は明示指示のときだけ、など）・トラブルシュートと、全コマンド／`flareon.yaml` の全キーのリファレンスが入っています。
+
+```bash
+flareon skill install            # このプロジェクトに入れる
+flareon skill install --global   # ~/ に入れる（全プロジェクトで使える）
+```
+
+- 実体は `<root>/.agents/skills/flareon/`（`SKILL.md` と `references/`）。`<root>/.claude/skills/flareon` はそこへの相対シンボリックリンク（`../../.agents/skills/flareon`）です。`<root>` は既定でカレントディレクトリ、`--dir <path>` で別のプロジェクトルート、`--global` でホームディレクトリ
+- 既存のインストールは `--force` が無いと上書きしません。同じ向きのリンクが既にあれば何もしません
+- シンボリックリンクを作れない環境（Windows など）では警告を出して `.claude/skills/flareon` にコピーします
+- このリポジトリでは `.agents/skills/flareon/` が正本で、`.claude/skills/flareon` がリンクです。スキルの本文は CLI の実装とテストで突き合わせています（コマンド／オプションの実在、リンク切れ、`flareon.yaml` の例の検証）
 
 ## ローカル開発（flareon dev）
 
@@ -143,7 +161,9 @@ flareon dev --stage prod --version v1  # 既存環境の DB/ストレージ等�
 - AI モデル ID はモデルレジストリで解決して渡し、Bedrock はローカルの AWS 認証情報で呼びます。`secrets:` は該当 stage の値を復号して環境変数に入れます（値は表示しません）
 - `app/` 以下の変更を監視して再起動します（`node_modules` / `__pycache__` / `venv` / ドットファイル等は無視）。ビルド失敗やクラッシュ時は次の変更を待ちます
 - python は `python -m uvicorn main:app`（PATH 上の `python`、無ければ `python3`）。`PYTHONDONTWRITEBYTECODE=1` で起動します（同じ秒に同じサイズで書き換えたときに古い .pyc が使われて変更が反映されない問題を避けるため）。`fastapi` / `uvicorn` など依存は自分の環境（venv 推奨）に入れておいてください。typescript は本番と同じ esbuild でバンドルして実行します（追加の依存なし）
-- 利用者のポート（127.0.0.1）には薄いプロキシが立ち、クライアントが送った `x-flareon-*` ヘッダは必ず削除します。`--as <email>` のときだけ `x-flareon-user-email` / `x-flareon-user-sub: dev:<email>` / `x-flareon-auth-mode: dev` を付けます（ローカルではサインイン画面や allow の判定は行いません）。剥がす層があるのでアプリには `FLAREON_AUTH_ENABLED=true` を渡します
+- 利用者のポート（127.0.0.1）には薄いプロキシが立ち、クライアントが送った `x-flareon-*` ヘッダは必ず削除します。`--as <email>` のときだけ `x-flareon-user-email` / `x-flareon-user-email-verified: true` / `x-flareon-user-sub: dev:<email>` / `x-flareon-auth-mode: dev` を付けます（ローカルではサインイン画面や allow の判定は行いません）。剥がす層があるのでアプリには `FLAREON_AUTH_ENABLED=true` を渡します
+- プロキシは `Host` が `localhost` / `127.0.0.1` / `[::1]`（ポート付き可）以外のリクエストを 403 にします（DNS rebinding で外部サイトからローカルのアプリを読まれないように）。`--as` のときは他サイトからのリクエスト（`Origin` が自オリジン以外、または `Sec-Fetch-Site: cross-site`）も 403 にします（擬似ユーザーとしての CSRF を防ぐ）
+- アプリには `HOST=127.0.0.1` と、起動ごとのランダムな `FLAREON_DEV_SECRET` を渡し、プロキシ経由のリクエストにだけ同じ値の `x-flareon-dev-secret` ヘッダを付けます。`flareon/runtime` の `identity()` は `FLAREON_DEV_SECRET` があるときヘッダが一致する場合だけ identity を返します（アプリが全インターフェースで listen していても、プロキシを経由しない直接アクセスの偽装ヘッダを信用しない）。**Python には runtime ライブラリが無いので、identity ヘッダを読むときは `FLAREON_DEV_SECRET` が設定されていれば `x-flareon-dev-secret` と一致する場合だけ信用してください**（uvicorn は `--host 127.0.0.1` で起動します）
 - `FLAREON_OFFLINE=1` で AWS に接続せずアプリだけ起動します（バインディングは `offline` 表示）
 - dev 環境の削除: `flareon destroy --stage preview --version local-<user>`
 
@@ -154,6 +174,8 @@ flareon dev --stage prod --version v1  # 既存環境の DB/ストレージ等�
 PR プレビューは **`http.auth: false` でも Preview Auth で保護します**（PR のコードを誤って無認証で公開しないため。`plan` / `deploy` に `forced for pull request previews` と表示されます）。`auth: false` で公開されるのは永続 stage（`prod` など）だけです。
 
 セッション Cookie は `__Host-flareon_session`（Secure・Path=/・Domain なし）、サインイン中の一時 Cookie は `__Secure-flareon_flow` です。
+
+セッションの寿命は最長 8 時間です。それより前に止めたいときは `flareon auth revoke-sessions --stage <stage>`（PR プレビューは `--pr <番号>`）でその環境のセッションを **すべて** 失効させます。`flareon auth user remove` も削除したユーザーのセッションを止めるため同じ失効を行います（他のユーザーもサインインし直しになります）。仕組みは SSM パラメータ `/flareon/<app>/<stage>/auth/session-epoch`（PR プレビューは `/flareon/<app>/preview/auth/pr-<N>/session-epoch`）のバージョンで、front は 60 秒キャッシュするため反映まで最大 60 秒かかります。パラメータを読めないときは 503 を返します（失効を確認できないまま通さない）。
 
 ### 外部 IdP（Google / OIDC / Entra ID）
 
@@ -272,6 +294,7 @@ http:
 - CDK bootstrap ロール（`cdk-<qualifier>-{deploy,file-publishing,image-publishing,lookup}-role-*`）の `sts:AssumeRole`、`cfn-exec` ロールの PassRole（CloudFormation 宛のみ）
 - CloudFormation の読み取り（Describe / Get / List）と、PR プレビューのスタック（`flareon-*-preview-pr-*`）だけの `DeleteStack`（`flareon-bootstrap-*` は明示 Deny）
 - SSM `/flareon/*` の読み取り
+- Secrets Manager `DescribeSecret`（`flareon/*/auth/*` = 外部 IdP の資格情報だけ。deploy が値を読まずに有無を確認するため）
 - Secrets Manager `GetSecretValue`（タグ `flareon:stage=preview` かつ `flareon:lifecycle=ephemeral` のシークレット＝PR プレビューのものだけ。永続 stage の Cookie 署名鍵は読めません）
 - CloudWatch Logs の読み取り（`FilterLogEvents` / `GetLogEvents` / `StartLiveTail`。Flareon のロググループ `flareon-*` だけ）
 

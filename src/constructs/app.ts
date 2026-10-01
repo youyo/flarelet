@@ -16,6 +16,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { join } from "node:path";
 import type { Construct } from "constructs";
 import { idpSecretNames } from "../config/names.js";
@@ -25,7 +26,13 @@ import { bindingEnvName } from "../runtime/env.js";
 import { resolveModel, type ResolvedModel } from "./ai-models.js";
 import { Data, removalOf, type Lifetime } from "./data.js";
 import { LAUNCHER_HANDLER } from "./launcher.js";
-import { domainPrefix, idpSecretName, secretsPath, stackNames } from "./names.js";
+import {
+  domainPrefix,
+  idpSecretName,
+  secretsPath,
+  sessionEpochParam,
+  stackNames,
+} from "./names.js";
 import { appCode, frontAuthCode } from "./packaging.js";
 import { HD_CLAIM } from "../auth/allow.js";
 
@@ -94,6 +101,21 @@ const AUTH_CALLBACK_PATH = "/__flareon/auth/callback";
  * シークレットにテンプレート上でタグを付ける（CloudFormation のスタックタグ伝播に頼らない）。
  * CI ロールは `flareon:stage=preview` かつ `flareon:lifecycle=ephemeral` のシークレットだけ読める。
  */
+/**
+ * セッション世代（DECISIONS.md）。front はパラメータの **バージョン** をセッションに入れる。
+ * `flareon auth revoke-sessions` / `auth user remove` が値を書き換えるとバージョンが進み、既存セッションは無効になる。
+ * 値ではなくバージョンを使うので、CloudFormation が値をテンプレートの初期値に書き戻しても失効は取り消されない。
+ */
+function sessionEpoch(scope: Construct, name: string): ssm.StringParameter {
+  const p = new ssm.StringParameter(scope, "SessionEpoch", {
+    parameterName: name,
+    stringValue: "initial",
+    description: "Flareon session epoch (its version invalidates older sessions)",
+  });
+  p.applyRemovalPolicy(RemovalPolicy.DESTROY);
+  return p;
+}
+
 function tagSecret(secret: secretsmanager.Secret, tags: Record<string, string>): void {
   for (const [k, v] of Object.entries(tags)) Tags.of(secret).add(k, v);
 }
@@ -204,6 +226,12 @@ export class StageStack extends Stack {
         ...(props.ir.http.auth.enabled && props.ir.http.auth.provider === "google"
           ? { customAttributes: { hd: new cognito.StringAttribute({ mutable: true }) } }
           : {}),
+        // cognito ネイティブでは利用者自身が email を書き換えられる（app client の書き込み属性から email は外せない:
+        // 必須属性のため Cognito が拒否する）。新しい email は検証が済むまで反映しない（email_verified も元のまま）。
+        // 外部 IdP では email は IdP 側の値でサインインのたびに上書きされるので設定しない
+        ...(props.ir.http.auth.enabled && props.ir.http.auth.provider === "cognito"
+          ? { keepOriginal: { email: true } }
+          : {}),
         accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
         removalPolicy: removalOf("retain"),
       });
@@ -217,6 +245,7 @@ export class StageStack extends Stack {
         removalPolicy: removalOf("retain"),
       });
       tagSecret(sessionSecret, { "flareon:stage": props.deployment.stage });
+      sessionEpoch(this, sessionEpochParam(props.ir.name, props.deployment));
       const identityProvider = addIdentityProvider(this, userPool, props);
       this.auth = { userPool, domainPrefix: prefix, sessionSecret, identityProvider };
       new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
@@ -261,6 +290,7 @@ export class VersionStack extends Stack {
       const tags = { "flareon:stage": deployment.stage, "flareon:lifecycle": deployment.lifecycle };
       tagSecret(sessionSecret, tags);
       tagSecret(previewToken, tags);
+      sessionEpoch(this, sessionEpochParam(ir.name, deployment));
     }
 
     // --- app Lambda ---
@@ -342,9 +372,12 @@ export class VersionStack extends Stack {
 
     if (front) {
       if (!sessionSecret) throw new Error("internal: session secret missing");
+      // persistent は stage スタック、PR preview はこのスタックのパラメータ。名前はリテラル（Export を作らない）
+      const epochParam = sessionEpochParam(ir.name, deployment);
       const frontEnv: Record<string, string> = {
         FLAREON_APP_FUNCTION_NAME: appFn.functionName,
         FLAREON_SESSION_SECRET_ARN: sessionSecret.secretArn,
+        FLAREON_SESSION_EPOCH_PARAM: epochParam,
       };
       if (previewToken) {
         frontEnv.FLAREON_AUTH_MODE = "preview";
@@ -423,6 +456,12 @@ export class VersionStack extends Stack {
       appFn.grantInvoke(frontFn);
       sessionSecret.grantRead(frontFn);
       previewToken?.grantRead(frontFn);
+      frontFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [`arn:aws:ssm:${this.region}:${Aws.ACCOUNT_ID}:parameter${epochParam}`],
+        }),
+      );
       integrationTarget = frontFn;
 
       new CfnOutput(this, "FrontLogGroup", { value: frontLogs.logGroupName });

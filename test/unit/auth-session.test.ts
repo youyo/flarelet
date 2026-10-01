@@ -85,13 +85,20 @@ describe("session cookie", () => {
     const c = issueSessionCookie({ sub: "u1", email: "a@b.c" }, "cognito", SESSION_KEY, NOW);
     const value = c.split(";")[0]!;
     const ev = makeEvent({ cookies: ["x=1", value] });
-    expect(readSession(ev, SESSION_KEY, "cognito", NOW)).toEqual({ sub: "u1", email: "a@b.c" });
+    expect(readSession(ev, SESSION_KEY, "cognito", NOW)).toEqual({
+      sub: "u1",
+      email: "a@b.c",
+      emailVerified: false,
+    });
   });
   it("cookie ヘッダからも読み出せる", () => {
     const c = issueSessionCookie({ sub: "u1" }, "preview", SESSION_KEY, NOW);
     const ev = makeEvent({ headers: { cookie: `a=b; ${c.split(";")[0]}` } });
     expect(parseCookies(ev)[SESSION_COOKIE]).toBeDefined();
-    expect(readSession(ev, SESSION_KEY, "preview", NOW)).toEqual({ sub: "u1" });
+    expect(readSession(ev, SESSION_KEY, "preview", NOW)).toEqual({
+      sub: "u1",
+      emailVerified: false,
+    });
   });
   it("期限切れ・モード不一致・Cookie なしは未認証", () => {
     const c = issueSessionCookie({ sub: "u1" }, "cognito", SESSION_KEY, NOW);

@@ -30,10 +30,16 @@ describe("runtime bindings", () => {
       "x-flareon-user-email": "a@example.com",
       "x-flareon-auth-mode": "cognito",
     };
-    expect(identity(h)).toEqual({ sub: "abc", email: "a@example.com", authMode: "cognito" });
+    expect(identity(h)).toEqual({
+      sub: "abc",
+      email: "a@example.com",
+      emailVerified: false,
+      authMode: "cognito",
+    });
     expect(identity(new Headers({ "x-flareon-user-sub": "z" }))).toEqual({
       sub: "z",
       email: undefined,
+      emailVerified: false,
       authMode: undefined,
     });
   });
@@ -60,5 +66,52 @@ describe("runtime bindings", () => {
       if (prev === undefined) delete process.env.FLAREON_AUTH_ENABLED;
       else process.env.FLAREON_AUTH_ENABLED = prev;
     }
+  });
+});
+
+describe("identity(): email verification (F1)", () => {
+  it("exposes emailVerified only when the front auth says the email is verified", () => {
+    const base = { "x-flareon-user-sub": "abc", "x-flareon-user-email": "a@example.com" };
+    expect(identity({ ...base, "x-flareon-user-email-verified": "true" }, {})).toMatchObject({
+      email: "a@example.com",
+      emailVerified: true,
+    });
+    expect(identity({ ...base, "x-flareon-user-email-verified": "false" }, {})).toMatchObject({
+      emailVerified: false,
+    });
+    expect(identity({ ...base, "x-flareon-user-email-verified": "TRUE " }, {})).toMatchObject({
+      emailVerified: false,
+    });
+    expect(identity(base, {})).toMatchObject({ emailVerified: false });
+  });
+});
+
+describe("identity(): flareon dev secret (F2)", () => {
+  const forged = {
+    "x-flareon-user-sub": "dev:admin@example.com",
+    "x-flareon-user-email": "admin@example.com",
+  };
+  const env = { FLAREON_AUTH_ENABLED: "true", FLAREON_DEV_SECRET: "s3cret-value" };
+
+  it("under flareon dev, ignores identity headers that did not come through the dev proxy", () => {
+    // アプリに直接届いたリクエスト（プロキシを経由しない）には秘密ヘッダが無い
+    expect(identity(forged, env)).toBeNull();
+    expect(identity({ ...forged, "x-flareon-dev-secret": "wrong" }, env)).toBeNull();
+    expect(identity({ ...forged, "x-flareon-dev-secret": "s3cret-valu" }, env)).toBeNull();
+  });
+
+  it("accepts identity headers that carry the per-session dev secret", () => {
+    expect(identity({ ...forged, "x-flareon-dev-secret": "s3cret-value" }, env)).toMatchObject({
+      sub: "dev:admin@example.com",
+    });
+    expect(
+      identity(new Headers({ ...forged, "x-flareon-dev-secret": "s3cret-value" }), env),
+    ).toMatchObject({ sub: "dev:admin@example.com" });
+  });
+
+  it("does not require the secret when FLAREON_DEV_SECRET is unset (Lambda)", () => {
+    expect(identity(forged, { FLAREON_AUTH_ENABLED: "true" })).toMatchObject({
+      sub: "dev:admin@example.com",
+    });
   });
 });

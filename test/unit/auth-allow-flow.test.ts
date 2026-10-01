@@ -107,7 +107,9 @@ describe("allow policy at sign-in", () => {
   it("without a policy, existing sessions keep working", async () => {
     const deps = await makeDeps();
     const handler = createHandler(COGNITO_ENV, deps);
-    const old = issueSessionCookie({ sub: "u1" }, "cognito", SESSION_KEY, NOW).split(";")[0]!;
+    const old = issueSessionCookie({ sub: "u1", epoch: 1 }, "cognito", SESSION_KEY, NOW).split(
+      ";",
+    )[0]!;
     expect((await handler(makeEvent({ headers: { cookie: old } }))).statusCode).toBe(200);
   });
 });

@@ -33,6 +33,7 @@ def whoami(request: Request):
     return {
         "sub": request.headers.get("x-flareon-user-sub"),
         "email": request.headers.get("x-flareon-user-email"),
+        "email_verified": request.headers.get("x-flareon-user-email-verified"),
         "mode": request.headers.get("x-flareon-auth-mode"),
         "function": os.environ.get("AWS_LAMBDA_FUNCTION_NAME"),
         "version": os.environ.get("FLAREON_VERSION"),

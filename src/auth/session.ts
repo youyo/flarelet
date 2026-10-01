@@ -64,7 +64,9 @@ export function issueSessionCookie(
     exp: Math.floor(nowMs / 1000) + SESSION_TTL_SECONDS,
   };
   if (identity.email !== undefined) payload["email"] = identity.email;
+  if (identity.emailVerified === true) payload["ev"] = true;
   if (identity.policy !== undefined) payload["ap"] = identity.policy;
+  if (identity.epoch !== undefined) payload["se"] = identity.epoch;
   return serializeCookie(SESSION_COOKIE, signPayload(payload, key), {
     maxAge: SESSION_TTL_SECONDS,
   });
@@ -97,6 +99,7 @@ export function readSession(
   mode: AuthMode,
   nowMs: number,
   policy?: string,
+  epoch?: number,
 ): Identity | undefined {
   const raw = parseCookies(event)[SESSION_COOKIE];
   if (!raw) return undefined;
@@ -105,7 +108,10 @@ export function readSession(
     return undefined;
   // allow ポリシーがある場合、同じポリシーで発行したセッションだけを受け付ける
   if (policy !== undefined && p["ap"] !== policy) return undefined;
+  // セッション世代が変わった（flareon auth revoke-sessions / auth user remove）セッションは受け付けない
+  if (epoch !== undefined && p["se"] !== epoch) return undefined;
   const identity: Identity = { sub: p["sub"] };
   if (typeof p["email"] === "string") identity.email = p["email"];
+  identity.emailVerified = p["ev"] === true;
   return identity;
 }

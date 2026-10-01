@@ -9,10 +9,13 @@ export const CLIENT_ID = "client123";
 export const COGNITO_DOMAIN = "https://myapp-prod-abc.auth.ap-northeast-1.amazoncognito.com";
 export const ISSUER = `https://cognito-idp.ap-northeast-1.amazonaws.com/${POOL_ID}`;
 
+export const EPOCH_PARAM = "/flareon/myapp/prod/auth/session-epoch";
+
 export const COGNITO_ENV = {
   FLAREON_AUTH_MODE: "cognito",
   FLAREON_APP_FUNCTION_NAME: "app-fn",
   FLAREON_SESSION_SECRET_ARN: "arn:session",
+  FLAREON_SESSION_EPOCH_PARAM: EPOCH_PARAM,
   FLAREON_COGNITO_DOMAIN: COGNITO_DOMAIN,
   FLAREON_COGNITO_CLIENT_ID: CLIENT_ID,
   FLAREON_COGNITO_USER_POOL_ID: POOL_ID,
@@ -22,6 +25,7 @@ export const PREVIEW_ENV = {
   FLAREON_AUTH_MODE: "preview",
   FLAREON_APP_FUNCTION_NAME: "app-fn",
   FLAREON_SESSION_SECRET_ARN: "arn:session",
+  FLAREON_SESSION_EPOCH_PARAM: EPOCH_PARAM,
   FLAREON_PREVIEW_TOKEN_SECRET_ARN: "arn:preview",
 };
 
@@ -46,6 +50,11 @@ export interface FakeDeps extends AuthDeps {
   invocations: { functionName: string; payload: string }[];
   fetchCalls: { url: string; init: RequestInit | undefined }[];
   secretCalls: string[];
+  /** getParameterVersion の呼び出し（パラメータ名）。 */
+  paramCalls: string[];
+  /** セッション世代（SSM パラメータのバージョン）を変える。Error を渡すと取得が失敗する。 */
+  setEpoch(v: number | Error): void;
+  setNow(ms: number): void;
   setInvoke(fn: AuthDeps["invoke"]): void;
   setFetch(fn: typeof fetch): void;
 }
@@ -70,11 +79,25 @@ export async function makeDeps(opts: { now?: number } = {}): Promise<
   let fetchImpl: typeof fetch = async () => {
     throw new Error("fetch not stubbed");
   };
+  let epoch: number | Error = 1;
+  let now = opts.now ?? NOW;
   const d = {
+    paramCalls: [] as string[],
+    getParameterVersion: async (name: string) => {
+      d.paramCalls.push(name);
+      if (epoch instanceof Error) throw epoch;
+      return epoch;
+    },
+    setEpoch(v: number | Error) {
+      epoch = v;
+    },
+    setNow(ms: number) {
+      now = ms;
+    },
     invocations: [] as FakeDeps["invocations"],
     fetchCalls: [] as FakeDeps["fetchCalls"],
     secretCalls: [] as string[],
-    now: () => opts.now ?? NOW,
+    now: () => now,
     getSecret: async (arn: string) => {
       d.secretCalls.push(arn);
       const v = secrets[arn];
