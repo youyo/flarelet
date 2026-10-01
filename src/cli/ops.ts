@@ -11,6 +11,8 @@ export interface OpsDeps extends SynthDeps {
   sleep: (ms: number) => Promise<void>;
   /** シークレット値の入力（stdin、TTY ならエコーなしプロンプト）。 */
   readSecret: (prompt: string) => Promise<string>;
+  /** 対話端末か（deploy / dev の自動 bootstrap の判定）。 */
+  interactive: () => boolean;
   /** logs --follow の停止シグナル。 */
   signal?: AbortSignal;
 }

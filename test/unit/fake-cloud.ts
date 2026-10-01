@@ -32,6 +32,10 @@ export class FakeCloud implements Cloud {
   users = new Map<string, Map<string, UserInfo>>();
   deleted: StackResource[] = [];
   failAccount: Error | undefined;
+  /** CDK bootstrap（qualifier → /cdk-bootstrap/<q>/version）。既定は bootstrap 済み。 */
+  bootstrapVersions = new Map<string, number>([["hnb659fds", 30]]);
+  failBootstrapCheck: Error | undefined;
+  bootstrapChecks: string[] = [];
   liveTail?: NonNullable<Cloud["liveTail"]>;
 
   addStack(s: Partial<StackInfo> & { name: string }): void {
@@ -45,6 +49,11 @@ export class FakeCloud implements Cloud {
   }
   async describeStack(name: string) {
     return this.stacks.get(name);
+  }
+  async bootstrapVersion(qualifier: string) {
+    this.bootstrapChecks.push(qualifier);
+    if (this.failBootstrapCheck) throw this.failBootstrapCheck;
+    return this.bootstrapVersions.get(qualifier);
   }
   async listAppStacks(app: string) {
     return [...this.stacks.values()].filter((s) => s.tags["flarelet:app"] === app);
@@ -154,13 +163,34 @@ export class FakeCloud implements Cloud {
   }
 }
 
+export interface BootstrapCall {
+  account: string;
+  region: string;
+  qualifier: string;
+}
+
 export class FakeDeployer implements Deployer {
   outdirs: string[] = [];
+  bootstraps: BootstrapCall[] = [];
+  bootstrapEvents: ProgressEvent[] = [];
+  bootstrapError: Error | undefined;
+  /** bootstrap 成功時の副作用（harness が FakeCloud に SSM パラメータを作る）。 */
+  onBootstrap: (env: BootstrapCall) => void = () => {};
+  /** deploy / bootstrap の呼び出し順。 */
+  order: string[] = [];
   events: ProgressEvent[] = [];
   result: DeployedStack[] = [];
   error: Error | undefined;
+  async bootstrap(env: BootstrapCall, onEvent: (e: ProgressEvent) => void) {
+    this.bootstraps.push(env);
+    this.order.push("bootstrap");
+    for (const e of this.bootstrapEvents) onEvent(e);
+    if (this.bootstrapError) throw this.bootstrapError;
+    this.onBootstrap(env);
+  }
   async deploy(outdir: string, onEvent: (e: ProgressEvent) => void) {
     this.outdirs.push(outdir);
+    this.order.push("deploy");
     for (const e of this.events) onEvent(e);
     if (this.error) throw this.error;
     return this.result;
@@ -179,6 +209,8 @@ export interface Harness {
   /** synth で書き出すテンプレート（スタック名 → テンプレート）。 */
   synthTemplates: Map<string, CfnTemplate>;
   secretInput: string | undefined;
+  /** 対話端末かどうか（自動 bootstrap の判定）。既定は非対話。 */
+  interactive: boolean;
   cleanup: () => Promise<void>;
 }
 
@@ -197,6 +229,7 @@ export async function harness(yaml: string, env: Record<string, string> = {}): P
     synthCalls: [],
     synthTemplates: new Map(),
     secretInput: undefined,
+    interactive: false,
     cleanup: () => rm(dir, { recursive: true, force: true }),
     deps: undefined as unknown as OpsDeps,
   };
@@ -225,10 +258,12 @@ export async function harness(yaml: string, env: Record<string, string> = {}): P
     deployer: () => h.deployer,
     now: () => (clock += 1000),
     sleep: async () => {},
+    interactive: () => h.interactive,
     readSecret: async () => {
       if (h.secretInput === undefined) throw new Error("no input");
       return h.secretInput;
     },
   };
+  h.deployer.onBootstrap = (env) => h.cloud.bootstrapVersions.set(env.qualifier, 30);
   return h;
 }

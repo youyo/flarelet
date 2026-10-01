@@ -31,7 +31,7 @@ flarelet logs
 
 - Node.js 24
 - 対象アカウントの AWS 認証情報（SSO など）。リージョンは `--region`、`AWS_REGION`、`AWS_DEFAULT_REGION` の順で決まります（未指定は `us-east-1`）
-- 対象アカウント・リージョンで `cdk bootstrap` 済みであること
+- 対象アカウント・リージョンで CDK bootstrap（`CDKToolkit` スタック）が 1 回必要です。通常は端末で実行した初回の `flarelet deploy` が自動で行います。CI・非対話・`--no-bootstrap` では自動で行わないので、事前に `flarelet bootstrap aws --region <region>` を一度実行してください（グローバルの `cdk` CLI は不要）
 - Python アプリは Docker（依存を Lambda のビルドコンテナで束ねます）
 
 このリポジトリのランタイムとタスクは [mise](https://mise.jdx.dev/) で管理しています。
@@ -309,9 +309,10 @@ flarelet dev --stage prod --version v1    # 既存環境の DB/ストレージ�
 
 PR プレビュー、ブランチのデプロイ、後片付けを GitHub Actions + OIDC で動かします。
 
-1. AWS アカウントで管理者権限の認証情報を使い、リポジトリごとに 1 回だけロールを作ります。
+1. AWS アカウントで管理者権限の認証情報を使い、リポジトリごとに 1 回だけロールを作ります。CI は自動で bootstrap しないので、先にアカウント・リージョンを bootstrap しておきます（1 回だけ。済みなら何もしません）。未 bootstrap だと `bootstrap github` は案内を出して止まります。
 
    ```bash
+   flarelet bootstrap aws --region ap-northeast-1
    flarelet bootstrap github --repo owner/name --region ap-northeast-1
    ```
 
@@ -372,26 +373,27 @@ v0 ではこのままにしています。絞る場合は、`flarelet bootstrap 
 
 ## CLI 一覧
 
-| コマンド                                                     | 内容                                                                                                      |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `flarelet init [dir] [--runtime python\|typescript]`         | `flarelet.yaml`・スターターアプリ・GitHub Actions ワークフローを作成                                      |
-| `flarelet validate`                                          | `flarelet.yaml` を検証（ワークフローの push ブランチが `git` 設定と食い違うと警告）                       |
-| `flarelet workflow generate [--force]`                       | `git` 設定から `.github/workflows/flarelet.yml` を生成。`--force` で異なる既存ファイルを上書き            |
-| `flarelet synth`                                             | CDK Cloud Assembly を `.flarelet/out/` に生成（デバッグ用）                                               |
-| `flarelet plan`                                              | デプロイ済みの状態と比較した変更を表示                                                                    |
-| `flarelet deploy [--ci]`                                     | デプロイして URL を表示                                                                                   |
-| `flarelet destroy [--stage-resources --yes] [--ci]`          | バージョンを削除。`--stage-resources` は stage の DB/ストレージ/ユーザー/シークレットまで完全削除         |
-| `flarelet env list`                                          | デプロイ済みの stage / version を一覧                                                                     |
-| `flarelet env url [--with-token]`                            | URL を表示。PR プレビューは `--with-token` でトークン付きリンク                                           |
-| `flarelet logs [--since 10m] [--follow]`                     | ログ表示。`--follow` は CloudWatch Logs Live Tail                                                         |
-| `flarelet dev [--port 8787] [--as <email>]`                  | ローカルで起動（ホットリロード）し、AWS の dev 用 DB/ストレージに接続                                     |
-| `flarelet secret set\|list\|delete`                          | シークレット管理（SSM SecureString。外部 IdP の資格情報は Secrets Manager）                               |
-| `flarelet auth user add\|list\|remove <email>`               | Cognito ユーザー管理。`remove` はその stage の全セッションも失効させる                                    |
-| `flarelet auth revoke-sessions`                              | その環境の Flarelet セッションをすべて失効させる（最大 60 秒で反映）                                      |
-| `flarelet github comment [--state ...] [--with-token]`       | PR コメントと GitHub Deployment を更新（CI 用）                                                           |
-| `flarelet bootstrap github --repo owner/name [--destroy]`    | GitHub Actions 用の AWS IAM ロールを作成／削除                                                            |
-| `flarelet completion zsh`                                    | zsh 補完スクリプトを出力（[シェル補完（zsh）](#シェル補完zsh) を参照）                                    |
-| `flarelet skill install [--global] [--dir <path>] [--force]` | AI エージェント向けスキルをインストール（[AI エージェント向けスキル](#ai-エージェント向けスキル) を参照） |
+| コマンド                                                       | 内容                                                                                                                                          |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flarelet init [dir] [--runtime python\|typescript]`           | `flarelet.yaml`・スターターアプリ・GitHub Actions ワークフローを作成                                                                          |
+| `flarelet validate`                                            | `flarelet.yaml` を検証（ワークフローの push ブランチが `git` 設定と食い違うと警告）                                                           |
+| `flarelet workflow generate [--force]`                         | `git` 設定から `.github/workflows/flarelet.yml` を生成。`--force` で異なる既存ファイルを上書き                                                |
+| `flarelet synth`                                               | CDK Cloud Assembly を `.flarelet/out/` に生成（デバッグ用）                                                                                   |
+| `flarelet plan`                                                | デプロイ済みの状態と比較した変更を表示                                                                                                        |
+| `flarelet deploy [--ci] [--bootstrap]`                         | デプロイして URL を表示。必要なら先にアカウント・リージョンを bootstrap（端末か `--bootstrap` のとき。`--ci`・`--no-bootstrap` では行わない） |
+| `flarelet destroy [--stage-resources --yes] [--ci]`            | バージョンを削除。`--stage-resources` は stage の DB/ストレージ/ユーザー/シークレットまで完全削除                                             |
+| `flarelet env list`                                            | デプロイ済みの stage / version を一覧                                                                                                         |
+| `flarelet env url [--with-token]`                              | URL を表示。PR プレビューは `--with-token` でトークン付きリンク                                                                               |
+| `flarelet logs [--since 10m] [--follow]`                       | ログ表示。`--follow` は CloudWatch Logs Live Tail                                                                                             |
+| `flarelet dev [--port 8787] [--as <email>]`                    | ローカルで起動（ホットリロード）し、AWS の dev 用 DB/ストレージに接続（`deploy` と同様に bootstrap。`--bootstrap` / `--no-bootstrap`）        |
+| `flarelet secret set\|list\|delete`                            | シークレット管理（SSM SecureString。外部 IdP の資格情報は Secrets Manager）                                                                   |
+| `flarelet auth user add\|list\|remove <email>`                 | Cognito ユーザー管理。`remove` はその stage の全セッションも失効させる                                                                        |
+| `flarelet auth revoke-sessions`                                | その環境の Flarelet セッションをすべて失効させる（最大 60 秒で反映）                                                                          |
+| `flarelet github comment [--state ...] [--with-token]`         | PR コメントと GitHub Deployment を更新（CI 用）                                                                                               |
+| `flarelet bootstrap aws [--region <region>] [--qualifier <q>]` | アカウント・リージョンを 1 回だけ CDK bootstrap（済みなら何もしない。既存の `CDKToolkit` は更新しない）                                       |
+| `flarelet bootstrap github --repo owner/name [--destroy]`      | GitHub Actions 用の AWS IAM ロールを作成／削除（bootstrap 済みであることが前提）                                                              |
+| `flarelet completion zsh`                                      | zsh 補完スクリプトを出力（[シェル補完（zsh）](#シェル補完zsh) を参照）                                                                        |
+| `flarelet skill install [--global] [--dir <path>] [--force]`   | AI エージェント向けスキルをインストール（[AI エージェント向けスキル](#ai-エージェント向けスキル) を参照）                                     |
 
 デプロイ先を決める共通オプション: `-f/--file`、`--stage`、`--version`、`--branch`、`--pr`、`--default-branch`、`--region`。
 
@@ -409,10 +411,21 @@ eval "$(flarelet completion zsh)"
 
 Claude Code などの AI エージェントが flarelet CLI を安全に使うための [Agent Skill](https://docs.claude.com/en/docs/claude-code/skills) を同梱しています。ワークフロー・安全上のルール（`destroy --stage-resources` の確認、シークレットは stdin、`auth: false` は明示指示のときだけ、など）・トラブルシュートと、全コマンド／`flarelet.yaml` の全キーのリファレンスが入っています。
 
+インストール方法は 2 通りあります。
+
 ```bash
+# 1. skills CLI で入れる（エージェント横断。flarelet のインストールは不要）
+npx skills add youyo/flarelet                               # このプロジェクトに入れる
+npx skills add youyo/flarelet -a claude-code -a codex       # 対象のエージェントを指定
+npx skills add youyo/flarelet -g                            # グローバルに入れる
+npx skills update                                           # 入れたスキルを更新
+
+# 2. flarelet CLI から入れる（インストール済みの CLI に同梱された、同じバージョンのスキル）
 flarelet skill install            # このプロジェクトに入れる
 flarelet skill install --global   # ~/ に入れる（全プロジェクトで使える）
 ```
+
+複数のエージェントにまとめて入れたい、GitHub の最新のスキルに追従したいときは `npx skills add`、使っている CLI と同じバージョンのスキルを入れたいときは `flarelet skill install` を使います（以下はこのコマンドの説明です）。
 
 - 実体は `<root>/.agents/skills/flarelet/`（`SKILL.md` と `references/`）。`<root>/.claude/skills/flarelet` はそこへの相対シンボリックリンク（`../../.agents/skills/flarelet`）です。`<root>` は既定でカレントディレクトリ、`--dir <path>` で別のプロジェクトルート、`--global` でホームディレクトリ
 - 既存のインストールは `--force` が無いと上書きしません。同じ向きのリンクが既にあれば何もしません
@@ -458,7 +471,7 @@ mise run lint:actions # GitHub Actions ワークフローを actionlint で検�
    FLARELET_E2E_AWS=1 mise run test:e2e:aws
    ```
 
-   `FLARELET_E2E_AWS` を設定しないとスキップされます。AWS 認証と `AWS_REGION`（`ap-northeast-1`）が必要です。`bootstrap github` の E2E は、アカウントに既にある GitHub OIDC プロバイダを変更・削除しないことも検証します。
+   `FLARELET_E2E_AWS` を設定しないとスキップされます。AWS 認証と `AWS_REGION`（`ap-northeast-1`）が必要です。`bootstrap github` の E2E は、アカウントに既にある GitHub OIDC プロバイダを変更・削除しないことも検証します。`bootstrap aws` の E2E は未 bootstrap の `us-west-2` を使い（bootstrap 済みなら中止します）、`deploy` が止まること、`deploy --bootstrap` が bootstrap してデプロイすることを確認したあと、`CDKToolkit` スタックとそのステージング用バケット・ECR リポジトリを削除します。
 
 ### CI
 

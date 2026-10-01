@@ -4,7 +4,7 @@
 
 ## デプロイ先を決める共通オプション
 
-`synth` / `plan` / `deploy` / `destroy` / `env url` / `logs` / `secret *` / `auth user *` / `auth revoke-sessions` / `github comment` が共通で受け取ります（`env list` は `-f` と `--region` のみ、`dev` と `bootstrap github` は下記の各節）。
+`synth` / `plan` / `deploy` / `destroy` / `env url` / `logs` / `secret *` / `auth user *` / `auth revoke-sessions` / `github comment` が共通で受け取ります（`env list` は `-f` と `--region` のみ、`dev` と `bootstrap aws` / `bootstrap github` は下記の各節）。
 
 | オプション                  | 内容                                                                                               |
 | --------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -56,9 +56,13 @@ CDK Cloud Assembly を `.flarelet/out/` に生成します（デバッグ用。A
 
 AWS にデプロイして URL を表示します。共通オプションに加えて次を受け取ります。
 
-| オプション | 内容                                                                                |
-| ---------- | ----------------------------------------------------------------------------------- |
-| `--ci`     | GitHub Actions モード。イベントからデプロイ先を導く（クローズ済み PR は何もしない） |
+| オプション       | 内容                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| `--ci`           | GitHub Actions モード。イベントからデプロイ先を導く（クローズ済み PR は何もしない）                 |
+| `--bootstrap`    | 対象のアカウント・リージョンが未 bootstrap なら、端末が無くても（`--ci` でも）自動で bootstrap する |
+| `--no-bootstrap` | 自動 bootstrap しない（未 bootstrap ならエラーで終了）。`--bootstrap` とは併用不可                  |
+
+デプロイ前に CDK bootstrap（`/cdk-bootstrap/hnb659fds/version`）の有無を確認します。未 bootstrap なら、対話端末では `Bootstrapping <account>/<region> for Flarelet (one-time)...` と表示して自動で `flarelet bootstrap aws` と同じ処理を行ってから続行します。`--ci`・非対話（stdin/stdout が端末でない）・`--no-bootstrap` のときは自動で行わず、`Error: <account>/<region> is not bootstrapped for Flarelet. Run: flarelet bootstrap aws --region <region>` で終了します。
 
 外部 IdP を使う永続 stage で資格情報が未設定だと、作成前に `flarelet secret set ...` と IdP に登録するリダイレクト URI を表示して終了します。
 
@@ -151,6 +155,10 @@ Cognito（既定の招待制）の stage だけが対象です。`auth: false` �
 | `--version <version>` | 既存の環境に接続する（`--stage` とセットで指定）                                                |
 | `--as <email>`        | サインイン済みユーザーを装う（`x-flarelet-*` の identity ヘッダを付ける。email は検証済み扱い） |
 | `--region <region>`   | AWS リージョン                                                                                  |
+| `--bootstrap`         | 未 bootstrap なら端末が無くても自動で bootstrap する（`deploy` と同じ）                         |
+| `--no-bootstrap`      | 自動 bootstrap しない（未 bootstrap ならエラー）。`--bootstrap` とは併用不可                    |
+
+既定モードで dev 用 DB／ストレージのスタックを作るときは、`deploy` と同じく CDK bootstrap を確認し、対話端末なら自動で bootstrap します。
 
 `FLARELET_OFFLINE=1` を付けると AWS に接続せずアプリだけ起動します。プロキシは `localhost` / `127.0.0.1` / `[::1]` 宛て以外の Host を 403 にし、`--as` のときは他サイトからのリクエスト（Origin が別、`Sec-Fetch-Site: cross-site`）も 403 にします。アプリには `HOST=127.0.0.1` と `FLARELET_DEV_SECRET` が渡り、プロキシ経由のリクエストにだけ同じ値の `x-flarelet-dev-secret` が付きます。dev 環境の削除は `flarelet destroy --stage preview --version local-<user>`。
 
@@ -165,9 +173,18 @@ PR コメントと GitHub Deployment を作成／更新します（CI 用。`GIT
 | `--state <state>` | `success`（既定）/ `failure` / `inactive`                                                 |
 | `--with-token`    | トークン付きマジックリンクをコメントに載せる。**private リポジトリのみ**（public は拒否） |
 
+### `flarelet bootstrap aws`
+
+STS で得たアカウント × リージョンに CDK bootstrap（`CDKToolkit` スタック）を作成します（アカウント・リージョンごとに 1 回）。`@aws-cdk/toolkit-lib` を使うので `cdk` CLI は不要です。既に bootstrap 済み（`/cdk-bootstrap/<qualifier>/version` がある）なら `already bootstrapped (version N)` と表示して何もしません。既存の `CDKToolkit` スタックは更新しません（別 qualifier の `CDKToolkit` がある場合はエラー）。通常は初回の `flarelet deploy` が自動で行うので、CI や `--no-bootstrap` で使う場合に事前に一度実行します。
+
+| オプション                | 内容                                           |
+| ------------------------- | ---------------------------------------------- |
+| `--qualifier <qualifier>` | CDK bootstrap の qualifier（既定 `hnb659fds`） |
+| `--region <region>`       | AWS リージョン                                 |
+
 ### `flarelet bootstrap github`
 
-GitHub Actions が OIDC で assume する IAM ロールを作成／削除します（管理者権限の認証情報で、リポジトリごとに 1 回）。
+GitHub Actions が OIDC で assume する IAM ロールを作成／削除します（管理者権限の認証情報で、リポジトリごとに 1 回）。対象のアカウント・リージョンが CDK bootstrap 済みであることが前提で、未 bootstrap なら自動では作らず `flarelet bootstrap aws` を案内して終了します。
 
 | オプション                | 内容                                                 |
 | ------------------------- | ---------------------------------------------------- |

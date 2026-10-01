@@ -51,12 +51,17 @@ export interface CliResult {
   ms: number;
 }
 
-export function cli(args: string[], cwd: string, input?: string): Promise<CliResult> {
+export function cli(
+  args: string[],
+  cwd: string,
+  input?: string,
+  region: string = REGION,
+): Promise<CliResult> {
   const t0 = Date.now();
   return new Promise((res) => {
     const child = execFile(
       process.execPath,
-      [CLI, ...args, "--region", REGION],
+      [CLI, ...args, "--region", region],
       { cwd, env: ENV, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout, stderr) => {
         res({
@@ -145,11 +150,20 @@ export async function eventually<T>(
   }
 }
 
-const cfn = new CloudFormationClient({ region: REGION });
+const cfnClients = new Map<string, CloudFormationClient>();
+const cfnIn = (region: string): CloudFormationClient => {
+  let c = cfnClients.get(region);
+  if (!c) cfnClients.set(region, (c = new CloudFormationClient({ region })));
+  return c;
+};
+const cfn = cfnIn(REGION);
 
-export async function stackOutputs(name: string): Promise<Record<string, string> | undefined> {
+export async function stackOutputs(
+  name: string,
+  region: string = REGION,
+): Promise<Record<string, string> | undefined> {
   try {
-    const out = await cfn.send(new DescribeStacksCommand({ StackName: name }));
+    const out = await cfnIn(region).send(new DescribeStacksCommand({ StackName: name }));
     const s = out.Stacks?.[0];
     if (!s || s.StackStatus === "DELETE_COMPLETE") return undefined;
     return Object.fromEntries((s.Outputs ?? []).map((o) => [o.OutputKey!, o.OutputValue!]));
@@ -165,11 +179,14 @@ export async function stackRoleArn(name: string): Promise<string | undefined> {
   return out.Stacks?.[0]?.RoleARN;
 }
 
-async function appStacks(app: string): Promise<{ name: string; id: string }[]> {
+async function appStacks(
+  app: string,
+  region: string = REGION,
+): Promise<{ name: string; id: string }[]> {
   const out: { name: string; id: string }[] = [];
   let token: string | undefined;
   do {
-    const page = await cfn.send(new DescribeStacksCommand({ NextToken: token }));
+    const page = await cfnIn(region).send(new DescribeStacksCommand({ NextToken: token }));
     for (const s of page.Stacks ?? []) {
       if (s.Tags?.some((t) => t.Key === "flarelet:app" && t.Value === app)) {
         out.push({ name: s.StackName!, id: s.StackId! });
@@ -197,12 +214,12 @@ const TRACK_TYPES = new Set([
 ]);
 
 /** アプリのスタックとその中の状態を持つリソースを記録する（後で消えたことを確認する）。 */
-export async function track(app: string, t: Tracked): Promise<void> {
-  for (const s of await appStacks(app)) {
+export async function track(app: string, t: Tracked, region: string = REGION): Promise<void> {
+  for (const s of await appStacks(app, region)) {
     t.stacks.add(s.name);
     let token: string | undefined;
     do {
-      const page = await cfn.send(
+      const page = await cfnIn(region).send(
         new ListStackResourcesCommand({ StackName: s.id, NextToken: token }),
       );
       for (const r of page.StackResourceSummaries ?? []) {
@@ -219,19 +236,25 @@ export async function track(app: string, t: Tracked): Promise<void> {
  * 後始末の安全網: CLI の destroy が失敗しても、テスト用アプリのスタック・RETAIN リソース・SSM を消す。
  * 対象は flarelet:app タグ（テスト専用名）と記録済みの物理 ID に限る。
  */
-export async function forceCleanup(app: string, t: Tracked): Promise<void> {
-  await track(app, t).catch(() => {});
-  const cloud = awsCloud(REGION);
-  for (const s of await appStacks(app)) {
+export async function forceCleanup(
+  app: string,
+  t: Tracked,
+  region: string = REGION,
+): Promise<void> {
+  await track(app, t, region).catch(() => {});
+  const cloud = awsCloud(region);
+  for (const s of await appStacks(app, region)) {
     // version スタックを先に（stage スタックの Export を参照しているため）
     if (!/-(prod|preview)$/.test(s.name)) {
       log(`safety net: deleting ${s.name}`);
       await cloud.deleteStack(s.name, () => {}).catch((e) => log(`  ${String(e)}`));
     }
   }
-  for (const s of await appStacks(app)) {
+  for (const s of await appStacks(app, region)) {
     log(`safety net: deleting ${s.name}`);
-    await cfn.send(new DeleteStackCommand({ StackName: s.id })).catch(() => {});
+    await cfnIn(region)
+      .send(new DeleteStackCommand({ StackName: s.id }))
+      .catch(() => {});
     await cloud.deleteStack(s.name, () => {}).catch((e) => log(`  ${String(e)}`));
   }
   for (const [id, type] of t.resources) {
@@ -240,7 +263,7 @@ export async function forceCleanup(app: string, t: Tracked): Promise<void> {
       .deleteRetained({ logicalId: "", physicalId: id, type })
       .catch((e) => log(`safety net: ${type} ${id}: ${String(e)}`));
   }
-  const ssm = new SSMClient({ region: REGION });
+  const ssm = new SSMClient({ region });
   const params = await ssm.send(
     new GetParametersByPathCommand({ Path: `/flarelet/${app}`, Recursive: true }),
   );
@@ -261,17 +284,21 @@ const notFound = async (fn: () => Promise<unknown>, names: RegExp): Promise<bool
 };
 
 /** 記録したスタック・リソースと SSM パラメータが 1 つも残っていないことを確認し、残りを返す。 */
-export async function leftovers(app: string, t: Tracked): Promise<string[]> {
+export async function leftovers(
+  app: string,
+  t: Tracked,
+  region: string = REGION,
+): Promise<string[]> {
   const left: string[] = [];
-  for (const s of await appStacks(app)) left.push(`stack ${s.name}`);
+  for (const s of await appStacks(app, region)) left.push(`stack ${s.name}`);
   for (const name of t.stacks) {
-    if (await stackOutputs(name)) left.push(`stack ${name}`);
+    if (await stackOutputs(name, region)) left.push(`stack ${name}`);
   }
-  const ddb = new DynamoDBClient({ region: REGION });
-  const s3 = new S3Client({ region: REGION });
-  const idp = new CognitoIdentityProviderClient({ region: REGION });
-  const sm = new SecretsManagerClient({ region: REGION });
-  const logs = new CloudWatchLogsClient({ region: REGION });
+  const ddb = new DynamoDBClient({ region });
+  const s3 = new S3Client({ region });
+  const idp = new CognitoIdentityProviderClient({ region });
+  const sm = new SecretsManagerClient({ region });
+  const logs = new CloudWatchLogsClient({ region });
   for (const [id, type] of t.resources) {
     let gone = true;
     switch (type) {
@@ -312,7 +339,7 @@ export async function leftovers(app: string, t: Tracked): Promise<string[]> {
     new DescribeLogGroupsCommand({ logGroupNamePrefix: `/aws/lambda/flarelet-${app}-` }),
   );
   for (const g of implicit.logGroups ?? []) left.push(`log group ${g.logGroupName}`);
-  const ssm = new SSMClient({ region: REGION });
+  const ssm = new SSMClient({ region });
   const params = await ssm.send(
     new GetParametersByPathCommand({ Path: `/flarelet/${app}`, Recursive: true }),
   );
@@ -325,10 +352,14 @@ export const get = (url: string, headers: Record<string, string> = {}) =>
   fetch(url, { redirect: "manual", headers });
 
 /** DynamoDB / Secrets Manager の削除は非同期なので、残りが無くなるまで最大 3 分待ってから返す。 */
-export async function leftoversSettled(app: string, t: Tracked): Promise<string[]> {
+export async function leftoversSettled(
+  app: string,
+  t: Tracked,
+  region: string = REGION,
+): Promise<string[]> {
   const deadline = Date.now() + 3 * 60_000;
   for (;;) {
-    const left = await leftovers(app, t);
+    const left = await leftovers(app, t, region);
     if (!left.length || Date.now() > deadline) return left;
     log(`waiting for deletion: ${left.join(", ")}`);
     await new Promise((r) => setTimeout(r, 10_000));

@@ -6,7 +6,8 @@ import {
   readlinkSync,
   realpathSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
@@ -48,6 +49,39 @@ describe("skill layout", () => {
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(readlinkSync(link)).toBe("../../.agents/skills/flarelet");
     expect(realpathSync(join(link, "SKILL.md"))).toBe(realpathSync(SKILL_MD));
+  });
+});
+
+describe("discovery by the skills CLI (npx skills add youyo/flarelet)", () => {
+  // vercel-labs/skills は .agents/skills/ と .claude/skills/ などを探索し、ディレクトリ名と frontmatter の name の一致を求める
+  const tracked = execFileSync("git", ["ls-files", "--", "*SKILL.md"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter(Boolean);
+
+  it("the repository tracks exactly one SKILL.md, under .agents/skills/<name>/", () => {
+    expect(tracked).toEqual([".agents/skills/flarelet/SKILL.md"]);
+    // ルート直下や skills/ に別の SKILL.md があると重複して検出される
+    expect(existsSync(join(ROOT, "SKILL.md"))).toBe(false);
+    expect(existsSync(join(ROOT, "skills"))).toBe(false);
+  });
+
+  it("the name follows the skills naming rule and matches the directory", () => {
+    const name = frontmatter(read(SKILL_MD)).name as string;
+    expect(name).toBe(basename(SKILL_DIR));
+    expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+    expect(name.length).toBeGreaterThanOrEqual(1);
+    expect(name.length).toBeLessThanOrEqual(64);
+    expect(typeof frontmatter(read(SKILL_MD)).description).toBe("string");
+  });
+
+  it("SKILL.md and both READMEs explain both ways to install", () => {
+    for (const f of [SKILL_MD, join(ROOT, "README.md"), join(ROOT, "README.ja.md")]) {
+      expect(read(f), f).toContain("npx skills add youyo/flarelet");
+      expect(read(f), f).toContain("flarelet skill install");
+    }
   });
 });
 

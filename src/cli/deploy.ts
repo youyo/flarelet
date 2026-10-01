@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProgressEvent } from "../aws/iohost.js";
 import { effectiveAuth } from "../ir/index.js";
+import { autoBootstrapAllowed, ensureBootstrapped } from "./bootstrap-aws.js";
 import { ciPreflight } from "./ci.js";
 import { idpRedirectUri, idpSecretState, missingIdpMessage, needsIdpSecrets } from "./idp.js";
 import { errorMessage, formatDuration, type OpsDeps } from "./ops.js";
@@ -86,6 +87,20 @@ export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number>
     io.stderr(`Error: cannot reach AWS: ${errorMessage(e)}`);
     return 1;
   }
+  const ready = await ensureBootstrapped({
+    cloud,
+    deployer: deps.deployer(t.region),
+    account,
+    region: t.region,
+    io,
+    auto: autoBootstrapAllowed({
+      flag: args.bootstrap,
+      ci: args.ci === true,
+      interactive: deps.interactive(),
+    }),
+    hintFlag: args.bootstrap === undefined,
+  });
+  if (!ready) return 1;
 
   let idpSecretVersions: Record<string, string> | undefined;
   if (needsIdpSecrets(t.ir, t.deployment)) {

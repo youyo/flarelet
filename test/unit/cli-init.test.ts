@@ -189,6 +189,13 @@ describe("runInit GitHub workflow", () => {
     expect(out.join("\n")).toContain("flarelet bootstrap github --repo");
     expect(out.join("\n")).toContain("FLARELET_AWS_ROLE_ARN");
   });
+
+  it("offers both ways to install the agent skill", async () => {
+    const { out } = await wf({ dir, runtime: "python" });
+    const text = out.join("\n");
+    expect(text).toContain("flarelet skill install");
+    expect(text).toContain("npx skills add youyo/flarelet");
+  });
 });
 
 describe("runInit workflow header", () => {

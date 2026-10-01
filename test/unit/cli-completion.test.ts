@@ -38,6 +38,7 @@ describe("generateZshCompletion", () => {
       "auth user list",
       "auth user remove",
       "auth revoke-sessions",
+      "bootstrap aws",
       "bootstrap github",
       "github comment",
       "skill install",

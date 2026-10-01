@@ -74,6 +74,40 @@ describe("operational commands (no AWS)", () => {
     }
   });
 
+  it("bootstrap aws shows its options in help", async () => {
+    const boot = await run(["bootstrap", "--help"], dir);
+    expect(boot.stdout).toMatch(/aws/);
+    const r = await run(["bootstrap", "aws", "--help"], dir);
+    expect(r.code).toBe(0);
+    for (const o of ["--region", "--qualifier", "hnb659fds"]) expect(r.stdout).toContain(o);
+  });
+
+  it("bootstrap aws fails cleanly without reachable AWS and creates nothing", async () => {
+    const r = await run(["bootstrap", "aws", "--region", "us-west-2"], dir);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("Error: cannot reach AWS");
+    expect(r.stdout).not.toContain("deploying CDKToolkit");
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+  });
+
+  it("deploy and dev accept --bootstrap / --no-bootstrap but not both", async () => {
+    for (const cmd of ["deploy", "dev"]) {
+      const help = await run([cmd, "--help"], dir);
+      expect(help.stdout).toContain("--bootstrap");
+      expect(help.stdout).toContain("--no-bootstrap");
+      const r = await run([cmd, "--bootstrap", "--no-bootstrap"], dir);
+      expect(r.code, cmd).toBe(1);
+      expect(r.stderr).toContain("--bootstrap and --no-bootstrap cannot be used together");
+    }
+  });
+
+  it("deploy stops on unreachable AWS before any bootstrap", async () => {
+    const r = await run(["deploy", "--stage", "prod", "--version", "v1", "--bootstrap"], dir);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("Error: cannot reach AWS");
+    expect(r.stdout).not.toContain("Bootstrapping");
+  });
+
   it("plan stays offline with FLARELET_OFFLINE=1", async () => {
     const r = await run(["plan", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);

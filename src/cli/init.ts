@@ -80,11 +80,16 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
   io.stdout("  flarelet validate");
   io.stdout("  flarelet synth --stage prod --version v1");
   io.stdout("");
+  io.stdout("AWS (once per account and region; the first flarelet deploy also does it):");
+  io.stdout("  flarelet bootstrap aws --region <region>");
+  io.stdout("");
   io.stdout("GitHub Actions (PR previews and deploys):");
   io.stdout("  flarelet bootstrap github --repo <owner>/<name>");
   io.stdout("  gh variable set FLARELET_AWS_ROLE_ARN --body <role arn printed above>");
   io.stdout("  gh variable set FLARELET_AWS_REGION --body <region>");
   io.stdout("");
-  io.stdout("AI coding agents (Claude Code etc.): flarelet skill install");
+  io.stdout(
+    "AI coding agents (Claude Code etc.): flarelet skill install (or: npx skills add youyo/flarelet)",
+  );
   return 0;
 }

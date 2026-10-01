@@ -50,6 +50,8 @@ export interface Cloud {
   /** STS の呼び出し元アカウント ID。 */
   account(): Promise<string>;
   describeStack(name: string): Promise<StackInfo | undefined>;
+  /** CDK bootstrap のバージョン（SSM `/cdk-bootstrap/<qualifier>/version`）。未 bootstrap なら undefined。 */
+  bootstrapVersion(qualifier: string): Promise<number | undefined>;
   /** `flarelet:app` タグが app のスタック（削除済みを除く）。 */
   listAppStacks(app: string): Promise<StackInfo[]>;
   /** 指定タグキーを持つスタック（削除済みを除く）。 */
@@ -114,7 +116,18 @@ export interface DeployedStack {
   outputs: Record<string, string>;
 }
 
+export interface BootstrapTarget {
+  account: string;
+  region: string;
+  qualifier: string;
+}
+
 export interface Deployer {
   /** Cloud Assembly（outdir）の全スタックをデプロイする。依存順は CDK に任せる。 */
   deploy(outdir: string, onEvent: (e: ProgressEvent) => void): Promise<DeployedStack[]>;
+  /**
+   * CDK bootstrap（CDKToolkit スタック）を新規作成する。
+   * 既存の CDKToolkit を更新しないよう、呼び出し側が事前に未 bootstrap であることを確認する。
+   */
+  bootstrap(target: BootstrapTarget, onEvent: (e: ProgressEvent) => void): Promise<void>;
 }

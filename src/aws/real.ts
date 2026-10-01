@@ -301,6 +301,19 @@ export function awsCloud(region: string): Cloud {
       }
     },
 
+    async bootstrapVersion(qualifier) {
+      try {
+        const out = await ssm.send(
+          new GetParameterCommand({ Name: `/cdk-bootstrap/${qualifier}/version` }),
+        );
+        const v = Number(out.Parameter?.Value);
+        return Number.isFinite(v) ? v : undefined;
+      } catch (e) {
+        if (errName(e) === "ParameterNotFound") return undefined;
+        throw e;
+      }
+    },
+
     async getSecretValue(arn) {
       const out = await sm.send(new GetSecretValueCommand({ SecretId: arn }));
       if (out.SecretString === undefined) throw new Error(`secret ${arn} has no value`);

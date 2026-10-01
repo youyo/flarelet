@@ -8,6 +8,7 @@ import { devVersion } from "../dev/user.js";
 import type { FlareletIR, RuntimeLanguage } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { ResolveError, resolveDeployment } from "../resolver/index.js";
+import { autoBootstrapAllowed, ensureBootstrapped } from "./bootstrap-aws.js";
 import { progressPrinter } from "./deploy.js";
 import { loadIR } from "./load.js";
 import { errorMessage, isOffline, type OpsDeps } from "./ops.js";
@@ -23,6 +24,8 @@ export interface DevArgs {
   port?: number;
   /** 擬似 identity（`x-flarelet-user-email` 等）を付ける。 */
   as?: string;
+  /** 未 bootstrap 時の自動 bootstrap（true: 常に許可、false: しない、未指定: 対話端末なら）。 */
+  bootstrap?: boolean;
 }
 
 export interface LocalOptions {
@@ -73,11 +76,22 @@ async function localBindings(
   appDir: string,
   cloud: Cloud,
   deps: DevDeps,
+  bootstrapFlag: boolean | undefined,
 ): Promise<Record<string, string> | null> {
   const { io } = deps;
   const bindings = aiBindingEnv(ir, region);
   if (ir.databases.length + ir.storages.length === 0) return bindings;
   const account = await cloud.account();
+  const ready = await ensureBootstrapped({
+    cloud,
+    deployer: deps.deployer(region),
+    account,
+    region,
+    io,
+    auto: autoBootstrapAllowed({ flag: bootstrapFlag, ci: false, interactive: deps.interactive() }),
+    hintFlag: bootstrapFlag === undefined,
+  });
+  if (!ready) return null;
   const outdir = join(appDir, ".flarelet", "dev", "out");
   let result: SynthResult;
   try {
@@ -124,6 +138,7 @@ async function resolve(
   region: string,
   appDir: string,
   deps: DevDeps,
+  bootstrapFlag: boolean | undefined,
 ): Promise<Resolved | null> {
   if (isOffline(deps.env)) return { bindings: {}, secrets: {}, devStack: false, offline: true };
   const cloud = deps.cloud(region);
@@ -138,7 +153,7 @@ async function resolve(
   try {
     bindings = connect
       ? await connectBindings(ir, d, cloud, deps.io)
-      : await localBindings(ir, d, region, appDir, cloud, deps);
+      : await localBindings(ir, d, region, appDir, cloud, deps, bootstrapFlag);
     if (!bindings) return null;
     const stored = ir.secrets.length
       ? await cloud.getParameterValues(secretsPath(ir.name, d.stage))
@@ -221,7 +236,7 @@ export async function runDev(args: DevArgs, deps: DevDeps): Promise<number> {
 
   io.stdout("Flarelet dev");
   io.stdout("");
-  const r = await resolve(ir, d, connect, region, appDir, deps);
+  const r = await resolve(ir, d, connect, region, appDir, deps, args.bootstrap);
   if (!r) return 1;
 
   const env: Record<string, string> = {

@@ -6,6 +6,8 @@ import { runRevokeSessions, runUserAdd, runUserList, runUserRemove } from "./aut
 import { synthGithubBootstrap } from "../bootstrap/github.js";
 import { gitExec, detectGit } from "../git/index.js";
 import { runBootstrapGithub } from "./bootstrap.js";
+import { isInteractive, runBootstrapAws } from "./bootstrap-aws.js";
+import { addBootstrapFlags, BOOTSTRAP_CONFLICT } from "./bootstrap-flags.js";
 import { runCompletion } from "./completion.js";
 import { runDeploy } from "./deploy.js";
 import { runDestroy } from "./destroy.js";
@@ -126,6 +128,7 @@ export function createProgram(): Command {
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     readSecret: readSecretInput,
+    interactive: () => isInteractive(process.stdin, process.stdout),
     ...(signal ? { signal } : {}),
   });
 
@@ -136,6 +139,7 @@ export function createProgram(): Command {
     }
     if (typeof o.pr === "number") a.pr = o.pr;
     if (o.ci === true) a.ci = true;
+    if (typeof o.bootstrap === "boolean") a.bootstrap = o.bootstrap;
     return a;
   };
 
@@ -153,12 +157,19 @@ export function createProgram(): Command {
     process.exitCode = await runPlan(a, opsDeps(a));
   });
 
-  targetOptions(
+  const deploy = targetOptions(
     program
       .command("deploy")
       .description("Deploy the app to AWS and print its URL")
       .option("--ci", "GitHub Actions mode: derive the target from the event (skips closed PRs)"),
-  ).action(async (o: Record<string, unknown>) => {
+  );
+  const deployFlags = addBootstrapFlags(deploy);
+  deploy.action(async (o: Record<string, unknown>) => {
+    if (deployFlags.conflicting()) {
+      console.error(BOOTSTRAP_CONFLICT);
+      process.exitCode = 1;
+      return;
+    }
     const a = toArgs(o);
     process.exitCode = await runDeploy(a, opsDeps(a));
   });
@@ -321,6 +332,24 @@ export function createProgram(): Command {
     .command("bootstrap")
     .description("Prepare the AWS account")
     .enablePositionalOptions();
+  bootstrap
+    .command("aws")
+    .description("Bootstrap the AWS account and region for Flarelet (CDK bootstrap, once)")
+    .option("--qualifier <qualifier>", "CDK bootstrap qualifier", "hnb659fds")
+    .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
+    .action(async (o: Record<string, unknown>) => {
+      const a = {
+        file: resolve("flarelet.yaml"),
+        ...(typeof o.region === "string" ? { region: o.region } : {}),
+      };
+      process.exitCode = await runBootstrapAws(
+        {
+          qualifier: String(o.qualifier),
+          ...(typeof o.region === "string" ? { region: o.region } : {}),
+        },
+        opsDeps(a),
+      );
+    });
   bootstrap
     .command("github")
     .description("Create the IAM role GitHub Actions of a repository assumes via OIDC")

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { type Command, InvalidArgumentError } from "commander";
 import { synthesizeDev } from "../constructs/dev.js";
 import { startLocal } from "../dev/session.js";
+import { addBootstrapFlags, BOOTSTRAP_CONFLICT } from "./bootstrap-flags.js";
 import { DEFAULT_DEV_PORT, runDev, type DevArgs } from "./dev.js";
 import type { OpsDeps } from "./ops.js";
 import type { SynthArgs } from "./synth.js";
@@ -28,7 +29,7 @@ const untilStopped = (): Promise<void> =>
 
 /** `flarelet dev` を登録する。 */
 export function registerDevCommand(program: Command, opsDeps: (a: SynthArgs) => OpsDeps): void {
-  program
+  const dev = program
     .command("dev")
     .description(
       "Run the app locally with hot reload, connected to AWS dev resources (preview/local-<user>)",
@@ -44,19 +45,26 @@ export function registerDevCommand(program: Command, opsDeps: (a: SynthArgs) => 
     .option("--stage <stage>", "connect to an existing environment instead (with --version)")
     .option("--version <version>", "connect to an existing environment instead (with --stage)")
     .option("--as <email>", "simulate a signed-in user (adds x-flarelet-* identity headers)")
-    .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
-    .action(async (o: Record<string, unknown>) => {
-      const a: DevArgs = { file: resolve(String(o.file)) };
-      for (const k of ["stage", "version", "region", "as"] as const) {
-        if (typeof o[k] === "string") a[k] = o[k];
-      }
-      if (typeof o.port === "number") a.port = o.port;
-      process.exitCode = await runDev(a, {
-        ...opsDeps({ file: a.file }),
-        username: osUser,
-        synthesizeDev,
-        startLocal,
-        untilStopped,
-      });
+    .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)");
+  const flags = addBootstrapFlags(dev);
+  dev.action(async (o: Record<string, unknown>) => {
+    if (flags.conflicting()) {
+      console.error(BOOTSTRAP_CONFLICT);
+      process.exitCode = 1;
+      return;
+    }
+    const a: DevArgs = { file: resolve(String(o.file)) };
+    for (const k of ["stage", "version", "region", "as"] as const) {
+      if (typeof o[k] === "string") a[k] = o[k];
+    }
+    if (typeof o.port === "number") a.port = o.port;
+    if (typeof o.bootstrap === "boolean") a.bootstrap = o.bootstrap;
+    process.exitCode = await runDev(a, {
+      ...opsDeps({ file: a.file }),
+      username: osUser,
+      synthesizeDev,
+      startLocal,
+      untilStopped,
     });
+  });
 }

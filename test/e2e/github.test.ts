@@ -57,6 +57,7 @@ describe("flarelet init (workflow)", () => {
     expect(doc.permissions["id-token"]).toBe("write");
     expect(doc.on.pull_request.types).toContain("closed");
     expect(r.stdout).toContain("flarelet bootstrap github --repo");
+    expect(r.stdout).toContain("flarelet bootstrap aws --region");
 
     await writeFile(file, "mine: true\n");
     await rm(join(proj, "flarelet.yaml"));

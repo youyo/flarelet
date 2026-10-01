@@ -31,7 +31,7 @@ For the design, see [docs/specs/FLARELET_V0_DESIGN.md](docs/specs/FLARELET_V0_DE
 
 - Node.js 24
 - AWS credentials (SSO is fine) for the target account. The region is resolved from `--region`, then `AWS_REGION`, then `AWS_DEFAULT_REGION` (default `us-east-1`)
-- `cdk bootstrap` already done in the target account and region
+- A CDK bootstrap (the `CDKToolkit` stack) in the target account and region, once. The first `flarelet deploy` in a terminal does it for you; for CI, non-interactive runs or `--no-bootstrap`, run `flarelet bootstrap aws --region <region>` once beforehand (no global `cdk` CLI is needed)
 - Docker, for Python apps (dependencies are bundled in a Lambda build container)
 
 Runtimes and tasks of this repository are managed with [mise](https://mise.jdx.dev/).
@@ -309,9 +309,10 @@ flarelet dev --stage prod --version v1    # connect to an existing environment's
 
 PR previews, branch deploys and cleanup run from GitHub Actions with OIDC.
 
-1. Once per repository, create the role with admin credentials for the AWS account.
+1. Once per repository, create the role with admin credentials for the AWS account. CI never bootstraps automatically, so bootstrap the account and region first (once; it does nothing if already done). `bootstrap github` stops with a hint if it is missing.
 
    ```bash
+   flarelet bootstrap aws --region ap-northeast-1
    flarelet bootstrap github --repo owner/name --region ap-northeast-1
    ```
 
@@ -372,26 +373,27 @@ Delete the role with `flarelet bootstrap github --repo owner/name --destroy`. If
 
 ## CLI reference
 
-| Command                                                      | Description                                                                                              |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `flarelet init [dir] [--runtime python\|typescript]`         | Create `flarelet.yaml`, a starter app and the GitHub Actions workflow                                    |
-| `flarelet validate`                                          | Validate `flarelet.yaml` (also warns when the workflow's push branches differ from the `git` settings)   |
-| `flarelet workflow generate [--force]`                       | Generate `.github/workflows/flarelet.yml` from the `git` settings. `--force` overwrites a differing file |
-| `flarelet synth`                                             | Generate the CDK Cloud Assembly into `.flarelet/out/` (for debugging)                                    |
-| `flarelet plan`                                              | Show changes compared with what is deployed                                                              |
-| `flarelet deploy [--ci]`                                     | Deploy and print the URL                                                                                 |
-| `flarelet destroy [--stage-resources --yes] [--ci]`          | Delete a version. `--stage-resources` also fully deletes the stage's DB, storage, users and secrets      |
-| `flarelet env list`                                          | List deployed stages and versions                                                                        |
-| `flarelet env url [--with-token]`                            | Print the URL. For a PR preview, `--with-token` gives a link with the token                              |
-| `flarelet logs [--since 10m] [--follow]`                     | Show logs. `--follow` uses CloudWatch Logs Live Tail                                                     |
-| `flarelet dev [--port 8787] [--as <email>]`                  | Run locally with hot reload, connected to the dev DB/storage on AWS                                      |
-| `flarelet secret set\|list\|delete`                          | Manage secrets (SSM SecureString; external IdP credentials live in Secrets Manager)                      |
-| `flarelet auth user add\|list\|remove <email>`               | Manage Cognito users. `remove` also revokes all sessions of that stage                                   |
-| `flarelet auth revoke-sessions`                              | Revoke every Flarelet session of the environment (effective within 60 seconds)                           |
-| `flarelet github comment [--state ...] [--with-token]`       | Update the PR comment and the GitHub Deployment (for CI)                                                 |
-| `flarelet bootstrap github --repo owner/name [--destroy]`    | Create or delete the AWS IAM role for GitHub Actions                                                     |
-| `flarelet completion zsh`                                    | Print the zsh completion script (see [Shell completion (zsh)](#shell-completion-zsh))                    |
-| `flarelet skill install [--global] [--dir <path>] [--force]` | Install the AI agent skill (see [Agent skill](#agent-skill))                                             |
+| Command                                                        | Description                                                                                                                                           |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flarelet init [dir] [--runtime python\|typescript]`           | Create `flarelet.yaml`, a starter app and the GitHub Actions workflow                                                                                 |
+| `flarelet validate`                                            | Validate `flarelet.yaml` (also warns when the workflow's push branches differ from the `git` settings)                                                |
+| `flarelet workflow generate [--force]`                         | Generate `.github/workflows/flarelet.yml` from the `git` settings. `--force` overwrites a differing file                                              |
+| `flarelet synth`                                               | Generate the CDK Cloud Assembly into `.flarelet/out/` (for debugging)                                                                                 |
+| `flarelet plan`                                                | Show changes compared with what is deployed                                                                                                           |
+| `flarelet deploy [--ci] [--bootstrap]`                         | Deploy and print the URL. Bootstraps the account/region first if needed (in a terminal, or with `--bootstrap`; never with `--ci` or `--no-bootstrap`) |
+| `flarelet destroy [--stage-resources --yes] [--ci]`            | Delete a version. `--stage-resources` also fully deletes the stage's DB, storage, users and secrets                                                   |
+| `flarelet env list`                                            | List deployed stages and versions                                                                                                                     |
+| `flarelet env url [--with-token]`                              | Print the URL. For a PR preview, `--with-token` gives a link with the token                                                                           |
+| `flarelet logs [--since 10m] [--follow]`                       | Show logs. `--follow` uses CloudWatch Logs Live Tail                                                                                                  |
+| `flarelet dev [--port 8787] [--as <email>]`                    | Run locally with hot reload, connected to the dev DB/storage on AWS (bootstraps like `deploy`; `--bootstrap` / `--no-bootstrap`)                      |
+| `flarelet secret set\|list\|delete`                            | Manage secrets (SSM SecureString; external IdP credentials live in Secrets Manager)                                                                   |
+| `flarelet auth user add\|list\|remove <email>`                 | Manage Cognito users. `remove` also revokes all sessions of that stage                                                                                |
+| `flarelet auth revoke-sessions`                                | Revoke every Flarelet session of the environment (effective within 60 seconds)                                                                        |
+| `flarelet github comment [--state ...] [--with-token]`         | Update the PR comment and the GitHub Deployment (for CI)                                                                                              |
+| `flarelet bootstrap aws [--region <region>] [--qualifier <q>]` | CDK-bootstrap the account and region once (does nothing if already bootstrapped; never updates an existing `CDKToolkit`)                              |
+| `flarelet bootstrap github --repo owner/name [--destroy]`      | Create or delete the AWS IAM role for GitHub Actions (requires the account/region to be bootstrapped)                                                 |
+| `flarelet completion zsh`                                      | Print the zsh completion script (see [Shell completion (zsh)](#shell-completion-zsh))                                                                 |
+| `flarelet skill install [--global] [--dir <path>] [--force]`   | Install the AI agent skill (see [Agent skill](#agent-skill))                                                                                          |
 
 Common options that choose the deployment target: `-f/--file`, `--stage`, `--version`, `--branch`, `--pr`, `--default-branch`, `--region`.
 
@@ -409,10 +411,21 @@ The script is generated from the CLI's command definitions, so it follows new co
 
 Flarelet bundles an [Agent Skill](https://docs.claude.com/en/docs/claude-code/skills) so that AI agents such as Claude Code can use the flarelet CLI safely. It contains the workflows, safety rules (confirm `destroy --stage-resources`, pass secrets via stdin, use `auth: false` only when explicitly told, and so on), troubleshooting, and a reference of every command and every `flarelet.yaml` key.
 
+There are two ways to install it:
+
 ```bash
+# 1. With the skills CLI (works across agents; installing the CLI is not needed)
+npx skills add youyo/flarelet                               # into this project
+npx skills add youyo/flarelet -a claude-code -a codex       # choose the target agents
+npx skills add youyo/flarelet -g                            # globally
+npx skills update                                           # update installed skills
+
+# 2. From the flarelet CLI (the skill bundled with the CLI you have installed)
 flarelet skill install            # into this project
 flarelet skill install --global   # into ~/ (available in every project)
 ```
+
+Use `npx skills add` to set it up for several agents or to follow the latest skill from GitHub. Use `flarelet skill install` to get the skill that matches the exact version of the CLI you run (the rest of this section describes this command).
 
 - The real files are in `<root>/.agents/skills/flarelet/` (`SKILL.md` and `references/`). `<root>/.claude/skills/flarelet` is a relative symlink to it (`../../.agents/skills/flarelet`). `<root>` is the current directory by default, another project root with `--dir <path>`, or your home directory with `--global`
 - An existing installation is not overwritten without `--force`. If the same link already exists, nothing happens
@@ -458,7 +471,7 @@ Other tasks: `test:e2e:file` and `test:e2e:aws:file` (run a single file), `test:
    FLARELET_E2E_AWS=1 mise run test:e2e:aws
    ```
 
-   It is skipped unless `FLARELET_E2E_AWS` is set. It needs AWS credentials and `AWS_REGION` (`ap-northeast-1`). The `bootstrap github` E2E also verifies that it does not modify or delete a GitHub OIDC provider that already exists in the account.
+   It is skipped unless `FLARELET_E2E_AWS` is set. It needs AWS credentials and `AWS_REGION` (`ap-northeast-1`). The `bootstrap github` E2E also verifies that it does not modify or delete a GitHub OIDC provider that already exists in the account. The `bootstrap aws` E2E uses `us-west-2`, which must not be bootstrapped beforehand (it aborts otherwise): it checks that `deploy` stops, that `deploy --bootstrap` bootstraps and deploys, and then deletes the `CDKToolkit` stack, its staging bucket and ECR repository.
 
 ### CI
 

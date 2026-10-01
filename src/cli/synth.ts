@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { synthesize, type SynthResult, type BuildOptions } from "../constructs/index.js";
 import { detectGit, gitExec, type GitInfo } from "../git/index.js";
 import { buildPlan, renderPlan, type PlanState } from "../planner/index.js";
+import { bootstrapWarning } from "./bootstrap-aws.js";
 import { errorMessage, isOffline } from "./ops.js";
 import {
   resolveDeployment,
@@ -30,6 +31,8 @@ export interface SynthArgs {
   idpSecretVersions?: Record<string, string>;
   /** GitHub Actions 向け（イベントに応じた実行可否の判定）。deploy / destroy で使う。 */
   ci?: boolean;
+  /** 未 bootstrap 時の自動 bootstrap（true: 常に許可、false: しない、未指定: 対話端末なら）。deploy で使う。 */
+  bootstrap?: boolean;
 }
 
 export interface SynthDeps {
@@ -205,6 +208,8 @@ export async function runPlan(
     try {
       cloud = deps.cloud(t.region);
       account = await cloud.account();
+      const warning = await bootstrapWarning(cloud, account, t.region);
+      if (warning) deps.io.stderr(warning);
     } catch (e) {
       cloud = undefined;
       deps.io.stderr(

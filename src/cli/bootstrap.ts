@@ -10,6 +10,7 @@ import {
   roleStackName,
   synthGithubBootstrap,
 } from "../bootstrap/github.js";
+import { DEFAULT_QUALIFIER, requireBootstrapped } from "./bootstrap-aws.js";
 import { progressLines } from "./bootstrap-progress.js";
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { regionOf } from "./synth.js";
@@ -25,8 +26,6 @@ export interface BootstrapGithubArgs {
   /** CDK bootstrap のクオリファイア（既定 hnb659fds）。 */
   qualifier?: string;
 }
-
-const DEFAULT_QUALIFIER = "hnb659fds";
 
 export async function runBootstrapGithub(
   args: BootstrapGithubArgs,
@@ -60,6 +59,18 @@ export async function runBootstrapGithub(
     return await create();
 
     async function create(): Promise<number> {
+      // cfn-exec ロール等の CDK bootstrap が前提。管理者の明示操作なので自動では作らない
+      if (
+        !(await requireBootstrapped(
+          cloud,
+          account,
+          region,
+          args.qualifier ?? DEFAULT_QUALIFIER,
+          io,
+        ))
+      ) {
+        return 1;
+      }
       const provider = await cloud.findOidcProvider(GITHUB_OIDC_URL);
       const providerStack = await cloud.describeStack(PROVIDER_STACK);
       if (providerStack && !provider) {
