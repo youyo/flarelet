@@ -1,0 +1,38 @@
+[tools]
+node = "24"
+
+[tasks.typecheck]
+description = "型チェック"
+run = "tsc -p tsconfig.json"
+
+[tasks.build]
+description = "dist へビルド"
+run = "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/index.js"
+
+[tasks."test:unit"]
+description = "Unit テスト"
+run = "vitest run test/unit"
+
+[tasks."test:e2e"]
+description = "E2E テスト（ビルド済み CLI を実行）"
+depends = ["build"]
+run = "vitest run test/e2e"
+
+[tasks.test]
+description = "Unit + E2E"
+depends = ["test:unit", "test:e2e"]
+
+[tasks.lint]
+description = "ESLint + Prettier チェック"
+run = ["eslint .", "prettier --check ."]
+
+[tasks.fmt]
+description = "Prettier で整形"
+run = "prettier --write ."
+
+[tasks.dev]
+description = "CLI を tsc watch でビルド"
+run = "tsc -p tsconfig.build.json --watch"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
