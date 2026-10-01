@@ -381,6 +381,101 @@ describe("http.auth: false", () => {
   });
 });
 
+describe("PR preview with http.auth: false (Preview Auth is forced)", () => {
+  const PUBLIC =
+    "version: 1\nname: myapp\nruntime: { language: typescript }\nhttp: { auth: false }\n";
+  const { stage, version } = build(PUBLIC, pr);
+  const t = Template.fromStack(version);
+
+  it("still puts the front auth Lambda in preview mode in front of the app", () => {
+    expect(stage).toBeUndefined();
+    t.resourceCountIs("AWS::Cognito::UserPool", 0);
+    t.resourceCountIs("AWS::Cognito::UserPoolClient", 0);
+    t.resourceCountIs("AWS::Lambda::Function", 2);
+    t.hasResourceProperties("AWS::Lambda::Function", {
+      Handler: "index.handler",
+      Environment: {
+        Variables: Match.objectLike({
+          FLAREON_AUTH_MODE: "preview",
+          FLAREON_PREVIEW_TOKEN_SECRET_ARN: Match.anyValue(),
+          FLAREON_SESSION_SECRET_ARN: Match.anyValue(),
+        }),
+      },
+    });
+    t.resourceCountIs("AWS::SecretsManager::Secret", 2);
+    t.hasOutput("PreviewTokenSecretArn", {});
+    expect(findCycle(t.toJSON())).toBeNull();
+  });
+
+  it("routes the API only to the front Lambda (the app is not reachable directly)", () => {
+    const perms = Object.values(t.findResources("AWS::Lambda::Permission"));
+    expect(perms).toHaveLength(1);
+    const fns = t.findResources("AWS::Lambda::Function");
+    const frontId = Object.entries(fns).find(
+      ([, f]) => (f as { Properties: { Handler: string } }).Properties.Handler === "index.handler",
+    )![0];
+    expect(JSON.stringify(perms[0])).toContain(frontId);
+    const invoke = stmts(t).filter((s) => [s.Action].flat().includes("lambda:InvokeFunction"));
+    expect(invoke).toHaveLength(1);
+  });
+
+  it("tells the app that identity headers come from the front Lambda", () => {
+    t.hasResourceProperties("AWS::Lambda::Function", {
+      Handler: "flareon-launcher.sh",
+      Timeout: 25,
+      Environment: { Variables: Match.objectLike({ FLAREON_AUTH_ENABLED: "true" }) },
+    });
+  });
+});
+
+describe("FLAREON_AUTH_ENABLED (whether a front auth layer strips x-flareon-* headers)", () => {
+  const appEnv = (yaml: string, d: Deployment) =>
+    Template.fromStack(build(yaml, d).version).findResources("AWS::Lambda::Function", {
+      Properties: { Handler: "flareon-launcher.sh" },
+    });
+  const envOf = (r: Record<string, unknown>) =>
+    (Object.values(r)[0] as { Properties: { Environment: { Variables: Record<string, string> } } })
+      .Properties.Environment.Variables;
+  it('is "false" for a public persistent stage and "true" with authentication', () => {
+    expect(
+      envOf(
+        appEnv(
+          "version: 1\nname: myapp\nruntime: { language: python }\nhttp: { auth: false }\n",
+          prod,
+        ),
+      ).FLAREON_AUTH_ENABLED,
+    ).toBe("false");
+    expect(
+      envOf(appEnv("version: 1\nname: myapp\nruntime: { language: python }\nhttp: true\n", prod))
+        .FLAREON_AUTH_ENABLED,
+    ).toBe("true");
+  });
+});
+
+describe("secret tags (used by the CI role to read only preview tokens)", () => {
+  const secretTags = (t: Template) =>
+    Object.values(t.findResources("AWS::SecretsManager::Secret")).map((r) =>
+      Object.fromEntries(
+        (
+          (r as { Properties: { Tags?: { Key: string; Value: string }[] } }).Properties.Tags ?? []
+        ).map((x) => [x.Key, x.Value]),
+      ),
+    );
+  it("tags PR preview secrets with flareon:stage=preview and flareon:lifecycle=ephemeral", () => {
+    const tags = secretTags(Template.fromStack(build(FULL, pr).version));
+    expect(tags).toHaveLength(2);
+    for (const t of tags) {
+      expect(t).toMatchObject({ "flareon:stage": "preview", "flareon:lifecycle": "ephemeral" });
+    }
+  });
+  it("the persistent stage signing key is tagged with its stage and no ephemeral lifecycle", () => {
+    const tags = secretTags(Template.fromStack(build(FULL, prod).stage!));
+    expect(tags).toHaveLength(1);
+    expect(tags[0]!["flareon:stage"]).toBe("prod");
+    expect(tags[0]!["flareon:lifecycle"]).toBeUndefined();
+  });
+});
+
 describe("no http / empty stage", () => {
   it("has no API gateway when http is absent, and no stage stack when it would be empty", () => {
     const { stage, version } = build(

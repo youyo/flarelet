@@ -49,6 +49,10 @@ describe("cognito login", () => {
     const flowCookie = res.cookies!.find((c) => c.startsWith(`${FLOW_COOKIE}=`))!;
     expect(flowCookie).toContain("HttpOnly");
     expect(flowCookie).toContain("Secure");
+    // Path を /__flareon/auth に絞るので __Host- は使えない。__Secure- で Secure を強制する
+    expect(FLOW_COOKIE).toBe("__Secure-flareon_flow");
+    expect(flowCookie).toContain("Path=/__flareon/auth");
+    expect(flowCookie).not.toMatch(/Domain=/i);
   });
   it.each([
     "//evil.com",

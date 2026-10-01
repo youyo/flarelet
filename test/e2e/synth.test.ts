@@ -181,6 +181,51 @@ describe("flareon init -> synth (typescript)", () => {
     expect(front?.Properties.Environment.Variables.FLAREON_AUTH_MODE).toBe("preview");
   });
 
+  it("auth: false does not make a PR preview public: Preview Auth is forced", async () => {
+    const f = join(dir, "flareon.yaml");
+    await writeFile(
+      f,
+      (await readFile(f, "utf8")).replace("http:\n  auth: true", "http:\n  auth: false"),
+    );
+    const r = await run(["synth", "--pr", "7"], dir);
+    expect(r.code, r.stderr).toBe(0);
+    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    expect(meta).toMatchObject({ stage: "preview", version: "pr-7", lifecycle: "ephemeral" });
+    const t = await readTemplate(dir, meta.stacks[0].name);
+    // S3 自動削除のカスタムリソースも index.handler なので、環境変数を持つものを選ぶ
+    const env = (h: string) =>
+      fns(t).find((x) => x.Properties.Handler === h && x.Properties.Environment)?.Properties
+        .Environment.Variables ?? {};
+    expect(env("index.handler").FLAREON_AUTH_MODE).toBe("preview");
+    expect(env("index.handler").FLAREON_PREVIEW_TOKEN_SECRET_ARN).toBeDefined();
+    expect(env("flareon-launcher.sh").FLAREON_AUTH_ENABLED).toBe("true");
+    expect(count(t, "AWS::SecretsManager::Secret")).toBe(2);
+    expect(count(t, "AWS::Lambda::Permission")).toBe(1);
+
+    const plan = await run(["plan", "--pr", "7"], dir);
+    expect(plan.code, plan.stderr).toBe(0);
+    expect(plan.stdout).toContain("+ preview authentication (forced for pull request previews)");
+    expect(plan.stdout).not.toContain("public endpoint");
+
+    // 永続 stage では従来どおり公開（front なし、identity() は常に null）
+    const prod = await run(["plan", "--stage", "prod", "--version", "v1"], dir);
+    expect(prod.stdout).toContain("+ public endpoint (no authentication)");
+  });
+
+  it("only preview/pr-N is ephemeral (explicit --stage preview --version pr-N included)", async () => {
+    const explicit = await run(["synth", "--stage", "preview", "--version", "pr-8"], dir);
+    expect(explicit.code, explicit.stderr).toBe(0);
+    const meta1 = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    expect(meta1).toMatchObject({ stage: "preview", version: "pr-8", lifecycle: "ephemeral" });
+    expect(meta1.stacks).toHaveLength(1);
+
+    const prod = await run(["synth", "--stage", "prod", "--version", "pr-5"], dir);
+    expect(prod.code, prod.stderr).toBe(0);
+    const meta2 = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    expect(meta2).toMatchObject({ stage: "prod", version: "pr-5", lifecycle: "persistent" });
+    expect(meta2.stacks).toHaveLength(2);
+  });
+
   it("rejects an unresolvable branch with a helpful message", async () => {
     const r = await run(["synth", "--branch", "wip/x", "--default-branch", "main"], dir);
     expect(r.code).toBe(1);

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProgressEvent } from "../aws/iohost.js";
+import { effectiveAuth } from "../ir/index.js";
 import { ciPreflight } from "./ci.js";
 import { idpRedirectUri, idpSecretState, missingIdpMessage, needsIdpSecrets } from "./idp.js";
 import { errorMessage, formatDuration, type OpsDeps } from "./ops.js";
@@ -134,17 +135,17 @@ export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number>
   );
   io.stdout("");
   if (url) io.stdout(`  URL   ${url}`);
-  const auth = s.ir.http?.auth;
-  if (s.ir.http && auth) {
-    if (!auth.enabled) io.stdout("  Auth  none (public)");
-    else if (d.lifecycle === "ephemeral") {
-      io.stdout("  Auth  preview token");
+  const eff = effectiveAuth(s.ir, d);
+  if (eff) {
+    if (eff.kind === "none") io.stdout("  Auth  none (public)");
+    else if (eff.kind === "preview") {
+      io.stdout(`  Auth  preview token${eff.forced ? " (forced for pull request previews)" : ""}`);
       io.stdout("");
       io.stdout(
         `  Open it with: flareon env url --pr ${d.version.replace(/^pr-/, "")} --with-token`,
       );
-    } else if (auth.provider !== "cognito") {
-      io.stdout(`  Auth  sign-in with ${auth.provider}`);
+    } else if (eff.auth.provider !== "cognito") {
+      io.stdout(`  Auth  sign-in with ${eff.auth.provider}`);
     } else {
       io.stdout("  Auth  sign-in required");
       io.stdout("");

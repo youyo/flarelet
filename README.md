@@ -45,7 +45,7 @@ myapp/
 └── .gitignore                 # .flareon/ を追加
 ```
 
-デプロイ先は Git から決まります。既定ではデフォルトブランチが `prod/current`、PR が `preview/pr-<番号>` です。明示するときは `--stage prod --version v1`。
+デプロイ先は Git から決まります。既定ではデフォルトブランチが `prod/current`、PR が `preview/pr-<番号>` です。明示するときは `--stage prod --version v1`。使い捨て（ephemeral）になるのは `preview/pr-<番号>` だけで、`--stage preview --version pr-5` の明示は `--pr 5` と同じ PR プレビューとして扱います（`prod/pr-5` などは通常の永続 version）。
 
 ```bash
 flareon plan                            # 何が作られる／変わるかを Flareon の概念で表示
@@ -104,7 +104,7 @@ git: # 省略可。省略時は「デフォルトブランチ → prod/current�
 | `ai.models[]`     | `FLAREON_AI_<NAME>_MODEL_ID`    |
 | `secrets[]`       | 宣言した名前そのまま            |
 
-認証済みユーザーは `x-flareon-user-sub` / `x-flareon-user-email` ヘッダで渡ります（クライアントが付けた `x-flareon-*` は削除されます）。
+認証済みユーザーは `x-flareon-user-sub` / `x-flareon-user-email` ヘッダで渡ります（クライアントが付けた `x-flareon-*` は front auth が削除します）。TypeScript では `flareon/runtime` の `identity(headers)` で読めます。`auth: false` の stage ではアプリに `FLAREON_AUTH_ENABLED=false` が渡り、`identity()` は常に `null` を返します（「制約」を参照）。
 
 アプリの規約: Python は `app/main.py` の `app`（ASGI）と `app/requirements.txt`、TypeScript は `app/index.ts` と `app/package.json`（`PORT` で listen、ポート 8080）。
 
@@ -142,14 +142,18 @@ flareon dev --stage prod --version v1  # 既存環境の DB/ストレージ等�
 - 既定では専用の dev 環境 `preview/local-<OS ユーザー名>` を使います。`database:` / `storage:` があれば、それだけを持つスタックを初回に作り（2 回目以降は再利用）、ローカルのアプリに本番と同じ環境変数（`FLAREON_DATABASE_*` など）で渡します。DB もストレージも無ければスタックは作りません
 - AI モデル ID はモデルレジストリで解決して渡し、Bedrock はローカルの AWS 認証情報で呼びます。`secrets:` は該当 stage の値を復号して環境変数に入れます（値は表示しません）
 - `app/` 以下の変更を監視して再起動します（`node_modules` / `__pycache__` / `venv` / ドットファイル等は無視）。ビルド失敗やクラッシュ時は次の変更を待ちます
-- python は `python -m uvicorn main:app`（PATH 上の `python`、無ければ `python3`）。`fastapi` / `uvicorn` など依存は自分の環境（venv 推奨）に入れておいてください。typescript は本番と同じ esbuild でバンドルして実行します（追加の依存なし）
-- 利用者のポート（127.0.0.1）には薄いプロキシが立ち、クライアントが送った `x-flareon-*` ヘッダは必ず削除します。`--as <email>` のときだけ `x-flareon-user-email` / `x-flareon-user-sub: dev:<email>` / `x-flareon-auth-mode: dev` を付けます（ローカルではサインイン画面や allow の判定は行いません）
+- python は `python -m uvicorn main:app`（PATH 上の `python`、無ければ `python3`）。`PYTHONDONTWRITEBYTECODE=1` で起動します（同じ秒に同じサイズで書き換えたときに古い .pyc が使われて変更が反映されない問題を避けるため）。`fastapi` / `uvicorn` など依存は自分の環境（venv 推奨）に入れておいてください。typescript は本番と同じ esbuild でバンドルして実行します（追加の依存なし）
+- 利用者のポート（127.0.0.1）には薄いプロキシが立ち、クライアントが送った `x-flareon-*` ヘッダは必ず削除します。`--as <email>` のときだけ `x-flareon-user-email` / `x-flareon-user-sub: dev:<email>` / `x-flareon-auth-mode: dev` を付けます（ローカルではサインイン画面や allow の判定は行いません）。剥がす層があるのでアプリには `FLAREON_AUTH_ENABLED=true` を渡します
 - `FLAREON_OFFLINE=1` で AWS に接続せずアプリだけ起動します（バインディングは `offline` 表示）
 - dev 環境の削除: `flareon destroy --stage preview --version local-<user>`
 
 ## 認証
 
 `http: true` の既定は Cognito の **招待制**（自己サインアップ無効）です。`flareon auth user add <email> --stage <stage>` で招待したユーザーだけがサインインできます。PR プレビューはこれとは別に Preview Auth（トークン付きリンク）で保護されます。
+
+PR プレビューは **`http.auth: false` でも Preview Auth で保護します**（PR のコードを誤って無認証で公開しないため。`plan` / `deploy` に `forced for pull request previews` と表示されます）。`auth: false` で公開されるのは永続 stage（`prod` など）だけです。
+
+セッション Cookie は `__Host-flareon_session`（Secure・Path=/・Domain なし）、サインイン中の一時 Cookie は `__Secure-flareon_flow` です。
 
 ### 外部 IdP（Google / OIDC / Entra ID）
 
@@ -242,7 +246,7 @@ http:
    ```
 
    - アカウントに GitHub OIDC プロバイダがあればそのまま再利用します（変更も削除もしません）。無い場合だけ Flareon が作ります
-   - 作られるロールは `repo:owner/name:*` の OIDC トークンだけが assume できます
+   - 作られるロールは `repo:owner/name:*` の OIDC トークンだけが assume できます（下記「信頼ポリシーのリスク」を参照）
    - 実行後に表示される案内に従ってリポジトリ変数を設定します。
 
    ```bash
@@ -266,12 +270,22 @@ http:
 ### bootstrap ロールの権限
 
 - CDK bootstrap ロール（`cdk-<qualifier>-{deploy,file-publishing,image-publishing,lookup}-role-*`）の `sts:AssumeRole`、`cfn-exec` ロールの PassRole（CloudFormation 宛のみ）
-- CloudFormation の読み取り（Describe / Get / List）と、`flareon-*` スタックの `DeleteStack`（`flareon-bootstrap-*` は明示 Deny）
+- CloudFormation の読み取り（Describe / Get / List）と、PR プレビューのスタック（`flareon-*-preview-pr-*`）だけの `DeleteStack`（`flareon-bootstrap-*` は明示 Deny）
 - SSM `/flareon/*` の読み取り
-- Secrets Manager `GetSecretValue`（`flareon:app` タグ付きのみ。Preview Auth トークン用）
-- CloudWatch Logs の読み取り（`FilterLogEvents` / `GetLogEvents` / `StartLiveTail`）
+- Secrets Manager `GetSecretValue`（タグ `flareon:stage=preview` かつ `flareon:lifecycle=ephemeral` のシークレット＝PR プレビューのものだけ。永続 stage の Cookie 署名鍵は読めません）
+- CloudWatch Logs の読み取り（`FilterLogEvents` / `GetLogEvents` / `StartLiveTail`。Flareon のロググループ `flareon-*` だけ）
 
-シークレットの書き込み、stage リソースの完全削除（`--stage-resources`）、ユーザー管理は含みません。これらは手元の認証情報で実行します。
+シークレットの書き込み、永続 stage / version の削除、stage リソースの完全削除（`--stage-resources`）、ユーザー管理は含みません。これらは手元の認証情報で実行します。
+
+#### 信頼ポリシーのリスク（sub 条件）
+
+ロールの信頼条件は `token.actions.githubusercontent.com:sub` が `repo:owner/name:*` です。つまり **そのリポジトリで動く任意のワークフロー・任意のブランチ**（push 権限を持つ人が作ったブランチ上の改変されたワークフローを含む）がロールを使えます。このロールは CDK bootstrap のデプロイロールを assume できるため、実質的にそのアカウント・リージョンへ任意の CloudFormation をデプロイできる強い権限です。
+
+v0 ではこのままにしています。絞る場合は、`flareon bootstrap github` の後に IAM コンソール等でロールの信頼ポリシーの `sub` 条件を次のように変更してください（再実行すると元に戻るので注意）。
+
+- GitHub の Environment を使う: ワークフローの job に `environment: production` を付け、Environment の保護ルール（必須レビュアー・デプロイ可能なブランチ）を設定し、`sub` を `repo:owner/name:environment:production` にする
+- ブランチと PR に限定する: `repo:owner/name:ref:refs/heads/main` と `repo:owner/name:pull_request` の 2 つだけを許可する（`StringLike` の値を配列にする）
+- 本番 deploy 用と PR プレビュー用でロールを分け、それぞれに上記の条件を付ける
 
 `flareon bootstrap github --repo owner/name --destroy` でロールを削除します。Flareon がプロバイダを作っていた場合に限り、そのプロバイダを信頼する他のロールが無いときだけプロバイダも削除します。
 
@@ -284,6 +298,7 @@ http:
 - 実 GitHub リポジトリでの PR 動作確認は v0 の範囲外です（テンプレート・resolver・CLI まで）
 - `--ci` はフォーク PR を扱いません。`destroy --ci` は closed の PR イベントでのみ動きます
 - カスタムドメインは v0 の対象外です
+- **`http.auth: false` の stage では `x-flareon-*` ヘッダを除去する層がありません。** クライアントが `x-flareon-user-sub` などを自由に付けて送れるので、アプリはこれらのヘッダを信頼しないでください。`flareon/runtime` の `identity()` は `FLAREON_AUTH_ENABLED=false` を見て常に `null` を返しますが、Python などでヘッダを直接読む場合は `FLAREON_AUTH_ENABLED` が `true` のときだけ使ってください
 
 ## 開発者向け
 

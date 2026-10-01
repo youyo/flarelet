@@ -7,6 +7,7 @@ import {
   SecretValue,
   Stack,
   type StackProps,
+  Tags,
 } from "aws-cdk-lib";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
@@ -18,7 +19,7 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { join } from "node:path";
 import type { Construct } from "constructs";
 import { idpSecretNames } from "../config/names.js";
-import type { FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareonIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 import { resolveModel, type ResolvedModel } from "./ai-models.js";
@@ -88,6 +89,14 @@ export const tagValue = (v: string): string =>
   v.replace(/[^\p{L}\p{N}\s_.:/=+\-@]/gu, "-").slice(0, 256);
 
 const AUTH_CALLBACK_PATH = "/__flareon/auth/callback";
+
+/**
+ * シークレットにテンプレート上でタグを付ける（CloudFormation のスタックタグ伝播に頼らない）。
+ * CI ロールは `flareon:stage=preview` かつ `flareon:lifecycle=ephemeral` のシークレットだけ読める。
+ */
+function tagSecret(secret: secretsmanager.Secret, tags: Record<string, string>): void {
+  for (const [k, v] of Object.entries(tags)) Tags.of(secret).add(k, v);
+}
 
 /** stage スコープ（persistent）の認証基盤。Cognito User Pool + ドメイン + Cookie 署名鍵。 */
 interface CognitoAuth {
@@ -207,6 +216,7 @@ export class StageStack extends Stack {
         generateSecretString: { passwordLength: 64, excludePunctuation: true },
         removalPolicy: removalOf("retain"),
       });
+      tagSecret(sessionSecret, { "flareon:stage": props.deployment.stage });
       const identityProvider = addIdentityProvider(this, userPool, props);
       this.auth = { userPool, domainPrefix: prefix, sessionSecret, identityProvider };
       new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
@@ -229,13 +239,15 @@ export class VersionStack extends Stack {
     const { ir, deployment, models } = props;
     const ephemeral = deployment.lifecycle === "ephemeral";
     const lifetime: Lifetime = ephemeral ? "destroy" : "retain";
-    const auth = ir.http?.auth.enabled ? ir.http.auth : null;
+    const eff = effectiveAuth(ir, deployment);
+    // front auth Lambda を置くか（置く場合はクライアント由来の x-flareon-* を剥がしてから app に渡す）
+    const front = eff !== null && eff.kind !== "none";
 
     // --- data / auth のスコープ解決 ---
     const data = props.stage?.data ?? new Data(this, "Data", { ir, lifetime });
     let sessionSecret: secretsmanager.Secret | undefined = props.stage?.auth?.sessionSecret;
     let previewToken: secretsmanager.Secret | undefined;
-    if (ephemeral && auth) {
+    if (eff?.kind === "preview") {
       sessionSecret = new secretsmanager.Secret(this, "SessionSecret", {
         description: "Flareon preview auth cookie signing key",
         generateSecretString: { passwordLength: 64, excludePunctuation: true },
@@ -246,6 +258,9 @@ export class VersionStack extends Stack {
         generateSecretString: { passwordLength: 32, excludePunctuation: true },
         removalPolicy: removalOf(lifetime),
       });
+      const tags = { "flareon:stage": deployment.stage, "flareon:lifecycle": deployment.lifecycle };
+      tagSecret(sessionSecret, tags);
+      tagSecret(previewToken, tags);
     }
 
     // --- app Lambda ---
@@ -257,6 +272,8 @@ export class VersionStack extends Stack {
       FLAREON_STAGE: deployment.stage,
       FLAREON_VERSION: deployment.version,
     };
+    // flareon/runtime の identity() が x-flareon-* を信頼してよいか（front が無い＝公開なら常に null）
+    if (ir.http) environment.FLAREON_AUTH_ENABLED = front ? "true" : "false";
     if (ir.secrets.length) environment.FLAREON_SECRETS_PATH = path;
     for (const [name, table] of Object.entries(data.tables)) {
       environment[bindingEnvName("DATABASE", name, "TABLE")] = table.tableName;
@@ -279,7 +296,7 @@ export class VersionStack extends Stack {
       ],
       memorySize: 512,
       // app < front <= 30s（front がある場合 app のタイムアウトは front が 504 に変換する）
-      timeout: Duration.seconds(auth ? 25 : 29),
+      timeout: Duration.seconds(front ? 25 : 29),
       environment,
     });
 
@@ -323,7 +340,7 @@ export class VersionStack extends Stack {
     const api = new apigwv2.HttpApi(this, "Api", { description: `Flareon ${ir.name}` });
     let integrationTarget: lambda.IFunction = appFn;
 
-    if (auth) {
+    if (front) {
       if (!sessionSecret) throw new Error("internal: session secret missing");
       const frontEnv: Record<string, string> = {
         FLAREON_APP_FUNCTION_NAME: appFn.functionName,
@@ -334,7 +351,8 @@ export class VersionStack extends Stack {
         frontEnv.FLAREON_PREVIEW_TOKEN_SECRET_ARN = previewToken.secretArn;
       } else {
         const sa = props.stage?.auth;
-        if (!sa) throw new Error("internal: stage auth missing");
+        if (!sa || eff.kind !== "cognito") throw new Error("internal: stage auth missing");
+        const auth = eff.auth;
         const google = auth.provider === "google";
         const client = new cognito.UserPoolClient(this, "Client", {
           userPool: sa.userPool,

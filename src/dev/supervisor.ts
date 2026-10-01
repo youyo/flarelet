@@ -15,6 +15,8 @@ export interface AppCommand {
   cmd: string;
   args: string[];
   cwd: string;
+  /** コマンド固有の環境変数（共通の env に上書きで足す）。 */
+  env?: Record<string, string>;
 }
 
 export interface SupervisorOptions {
@@ -66,7 +68,7 @@ export function createSupervisor(o: SupervisorOptions, deps: SupervisorDeps): Su
       return;
     }
     if (stopped) return;
-    const proc = deps.spawn(c.cmd, c.args, { cwd: c.cwd, env: o.env });
+    const proc = deps.spawn(c.cmd, c.args, { cwd: c.cwd, env: { ...o.env, ...c.env } });
     child = proc;
     proc.once("exit", (code, signal) => {
       if (child === proc) child = undefined;

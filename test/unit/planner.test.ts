@@ -60,6 +60,17 @@ Deploy with:
     expect(out).toContain("preview authentication");
   });
 
+  it("forces preview authentication on ephemeral previews even with auth:false", () => {
+    const open = ir(
+      "version: 1\nname: myapp\nruntime: { language: python }\nhttp: { auth: false }\n",
+    );
+    const out = renderPlan(
+      buildPlan(open, { stage: "preview", version: "pr-3", lifecycle: "ephemeral" }),
+    );
+    expect(out).toContain("+ preview authentication (forced for pull request previews)");
+    expect(out).not.toContain("public endpoint");
+  });
+
   it("omits authentication for auth:false and http-less apps", () => {
     const open = ir(
       "version: 1\nname: myapp\nruntime: { language: python }\nhttp: { auth: false }\n",

@@ -1,4 +1,5 @@
 import { stackNames } from "../constructs/names.js";
+import { lifecycleOf } from "../resolver/index.js";
 import { loadIR } from "./load.js";
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { regionOf, resolveTarget, type SynthArgs } from "./synth.js";
@@ -42,7 +43,7 @@ export async function runEnvList(
     .map((s) => {
       const version = s.tags["flareon:version"]!;
       const type =
-        s.tags["flareon:lifecycle"] ?? (/^pr-\d+$/.test(version) ? "ephemeral" : "persistent");
+        s.tags["flareon:lifecycle"] ?? lifecycleOf(s.tags["flareon:stage"] ?? "", version);
       return [
         s.tags["flareon:stage"] ?? "-",
         version,

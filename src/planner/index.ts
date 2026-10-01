@@ -1,4 +1,4 @@
-import type { FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareonIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 
 export interface PlanItem {
@@ -33,15 +33,17 @@ function describe(ir: FlareonIR, d: Deployment): { key: string; label: string }[
   for (const db of ir.databases)
     items.push({ key: `database.${db.name}`, label: `database.${db.name}` });
   for (const s of ir.storages) items.push({ key: `storage.${s.name}`, label: `storage.${s.name}` });
-  if (ir.http) {
-    if (!ir.http.auth.enabled) {
-      items.push({ key: "authentication", label: "public endpoint (no authentication)" });
-    } else {
-      items.push({
-        key: "authentication",
-        label: d.lifecycle === "ephemeral" ? "preview authentication" : "authentication",
-      });
-    }
+  const auth = effectiveAuth(ir, d);
+  if (auth) {
+    const label =
+      auth.kind === "none"
+        ? "public endpoint (no authentication)"
+        : auth.kind === "preview"
+          ? auth.forced
+            ? "preview authentication (forced for pull request previews)"
+            : "preview authentication"
+          : "authentication";
+    items.push({ key: "authentication", label });
   }
   for (const m of ir.aiModels) items.push({ key: `ai.${m}`, label: `ai.${m}` });
   if (ir.secrets.length) {

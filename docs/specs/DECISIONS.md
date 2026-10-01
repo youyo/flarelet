@@ -15,7 +15,7 @@
 ## Config → IR → Resolver → Constructs
 - YAML の型はそのまま CDK に渡さない。正規化済み Flareon IR を境界にする
 - `http: true` は `http: { auth: true }` と同義。auth 省略時は true。`auth: false` のみ公開
-- Deployment Resolver: Git ref / CLI 引数 → `{ stage, version }`
+- Deployment Resolver: Git ref / CLI 引数 → `{ stage, version }`。lifecycle は `preview/pr-N` のときだけ ephemeral（下記「独立検証の指摘対応」）
   - 既定: default branch → `prod/current`（stage 名は `prod`。設定キーは `git.production`）、PR → `preview/pr-{n}`
   - 仕様 §8 の `git.production.branch` glob + `version: branch`（`release/v1` → `prod/v1`）、`git.preview.branch: default`
 
@@ -35,7 +35,7 @@
 - Cognito: User Pool は stage スコープ。app client は **version スタック**で作る（HTTP API URL は Api 作成時に確定 → client の callback → auth Lambda env の順で非循環）。public client + PKCE。ドメインプレフィックスは決定的に自動生成（`{app}-{stage}-{短縮ハッシュ}`）
 - Cookie 署名鍵と Preview トークンは Secrets Manager `GenerateSecretString`（CFN ネイティブ）で生成。署名鍵は stage スコープ（preview は preview スタック内）
 - Preview Auth: front Lambda のモード切替。トークンは preview スタックの Secrets Manager secret。`/__flareon/auth/preview?token=...` のマジックリンクで Cookie 発行。トークンは CLI（例: `flareon env url --with-token`）で取得。CI ログには出さない
-- `auth: false` の場合は front Lambda を置かず HTTP API → app Lambda 直結
+- `auth: false` の場合は front Lambda を置かず HTTP API → app Lambda 直結（永続 stage のみ。PR preview は下記「独立検証の指摘対応」の通り Preview Auth を強制）
 
 ## ランタイム
 - app Lambda は Lambda Web Adapter（レイヤー）で Web アプリをそのまま動かす。ポート 8080
@@ -126,3 +126,38 @@
 - 手順の参照元: https://docs.aws.amazon.com/solutions/latest/spatial-data-management-on-aws/configure-entra-id.html （アプリ登録・リダイレクト URI `/oauth2/idpresponse`・scopes・issuer・email マッピング）
 - User Pool は email 必須なので、email クレームを持たない Entra ユーザーはサインインできない（必須属性の変更はプール置換になるので変えない）
 - `deploy` で資格情報が無いとき、IdP に登録するリダイレクト URI（`https://<prefix>.auth.<region>.amazoncognito.com/oauth2/idpresponse`、prefix は app/stage/アカウントから決定的）も表示する（google / oidc 共通）
+
+## 独立検証の指摘対応
+
+### PR preview の認証を強制（仕様 §9）
+- 仕様 §9「PR previews are **not accidentally unauthenticated public applications**」に従い、PR preview（ephemeral）では `http.auth: false` でも Preview Auth（front Lambda の preview モード + トークン）を置く。`auth: false` が効くのは永続 stage だけ
+- 実効的な認証は `effectiveAuth(ir, deployment)`（`src/ir/effective-auth.ts`）1 か所で決め、constructs / plan / deploy の表示はすべてこれを使う（IR は deployment に依存しないため IR には入れない）
+- 表示: plan は `+ preview authentication (forced for pull request previews)`、deploy は `Auth  preview token (forced for pull request previews)`
+
+### ephemeral の判定
+- ephemeral は `stage = preview` かつ `version = pr-<N>` のときだけ。`release/pr-5`（`production.branch: release/*`, `version: branch`）は `prod/pr-5` の persistent
+- Git 由来でこの組を作れるのは PR ref だけ（preview ブランチは `preview/current`）。`--stage preview --version pr-N` の明示は PR preview の予約名として `--pr N` と同じ扱い（スタック名 `flareon-<app>-preview-pr-N` が同一なので、persistent として作ると既存の PR preview を別構成に置き換えてしまう。`plan` が案内する `flareon deploy --stage preview --version pr-N` もこれで正しく PR preview になる）
+- `pr-N` を他の stage（`prod` / `staging` など）で使うと通常の persistent version。`env list` の TYPE はスタックタグ `flareon:lifecycle`（無い古いスタックは同じ規則で推定）
+
+### アプリへの identity の信頼
+- app Lambda に `FLAREON_AUTH_ENABLED`（front auth がある＝クライアントの `x-flareon-*` を剥がす層があるなら `true`、`auth: false` の永続 stage では `false`）を渡す。`flareon/runtime` の `identity()` は `false` のとき常に null を返す
+- `auth: false` ではクライアントが送った `x-flareon-*` がそのままアプリに届く。アプリはヘッダを信頼しないこと（README の制約）
+
+### Cookie
+- セッション Cookie は `__Host-flareon_session`（Secure・Path=/・Domain なし。ブラウザがこの属性の場合だけ受け付ける）
+- OAuth の flow Cookie は Path を `/__flareon/auth` に絞るため `__Host-` は使えず、`__Secure-flareon_flow`
+- 名前の変更により、変更前に発行したセッションは無効（再サインイン）
+
+### Preview トークンの URL
+- `/__flareon/auth/preview?token=...` は検証に成功すると Cookie を発行して `/` へ 302 する（トークンを含まない URL。従来から）。トークン付き URL はリンクを開いた時点のブラウザ履歴には残り得る
+
+### CI ロール（bootstrap github）の権限を絞る
+- Secrets Manager `GetSecretValue` は `aws:ResourceTag/flareon:stage = preview` **かつ** `aws:ResourceTag/flareon:lifecycle = ephemeral` のシークレットだけ。stage だけだと `git.preview.branch` の `preview/current`（persistent・Cognito）の Cookie 署名鍵も読めてしまうため lifecycle も条件に入れる
+  - タグは CloudFormation のスタックタグ伝播に頼らず、テンプレートでシークレットに明示的に付ける（PR preview の SessionSecret / PreviewToken に `flareon:stage` と `flareon:lifecycle`、stage スタックの SessionSecret に `flareon:stage`）
+- CloudWatch Logs は `log-group:flareon-*` と `log-group:flareon-*:*` だけ。Flareon の Lambda のロググループは名前を指定せず作っており、CloudFormation の自動命名でスタック名（`flareon-<app>-...`）から始まる（`/aws/lambda/...` ではない）。StartLiveTail はロググループ ARN（末尾 `:*` なし）で評価されるので両方を書く
+- `DeleteStack` は `flareon-*-preview-pr-*` だけ（`destroy --ci` は PR closed でのみ動く）。永続 stage / version の削除は手元の認証情報で行う
+- 実 AWS E2E は IAM ポリシーシミュレータ（`SimulatePrincipalPolicy`）でタグ・スタック名・ロググループ名ごとの許可／拒否を確認する
+- 信頼ポリシーの `sub` は v0 では `repo:<owner>/<name>:*` のまま（リスクと絞り方は README）
+
+### flareon dev（python）の .pyc
+- python の子プロセスに `PYTHONDONTWRITEBYTECODE=1` を渡す。.pyc の鮮度判定はソースの mtime（秒）とサイズなので、同じ秒に同じサイズで書き換えると古いバイトコードが使われ、再起動しても変更が反映されないことがある（利用者の実使用でも起きる）。書き込みを止めるだけなので、既存の `__pycache__` の .pyc はソースと mtime・サイズが一致する間は読まれる

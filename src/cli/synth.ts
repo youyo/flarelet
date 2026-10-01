@@ -12,7 +12,7 @@ import {
   type Deployment,
   type GitRef,
 } from "../resolver/index.js";
-import type { FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareonIR } from "../ir/index.js";
 import { idpSecretState, needsIdpSecrets } from "./idp.js";
 import { loadIR } from "./load.js";
 import type { Io } from "./validate.js";
@@ -249,7 +249,7 @@ export async function runPlan(
       );
       const diff = diffTemplates(pairs);
       // 認証なしの公開エンドポイントは専用リソースを持たない。application があれば存在扱い。
-      if (s.ir.http && !s.ir.http.auth.enabled && diff.existing.has("application")) {
+      if (effectiveAuth(s.ir, s.deployment)?.kind === "none" && diff.existing.has("application")) {
         diff.existing.add("authentication");
         diff.removed.delete("authentication");
       }

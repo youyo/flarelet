@@ -11,6 +11,8 @@ import {
   ListOpenIDConnectProvidersCommand,
   ListRolePoliciesCommand,
   GetRolePolicyCommand,
+  SimulatePrincipalPolicyCommand,
+  type ContextEntry,
 } from "@aws-sdk/client-iam";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cli, ENABLED, log, LONG, REGION, stackOutputs } from "./helpers.js";
@@ -24,6 +26,29 @@ import {
 
 const iam = new IAMClient({ region: REGION });
 const HOST = "token.actions.githubusercontent.com";
+
+/** IAM ポリシーシミュレータでロールの判定（allowed / implicitDeny / explicitDeny）を得る。 */
+async function decide(
+  roleArn: string,
+  action: string,
+  resource: string,
+  tags: Record<string, string> = {},
+): Promise<string | undefined> {
+  const ContextEntries: ContextEntry[] = Object.entries(tags).map(([k, v]) => ({
+    ContextKeyName: `aws:ResourceTag/${k}`,
+    ContextKeyType: "string",
+    ContextKeyValues: [v],
+  }));
+  const out = await iam.send(
+    new SimulatePrincipalPolicyCommand({
+      PolicySourceArn: roleArn,
+      ActionNames: [action],
+      ResourceArns: [resource],
+      ContextEntries,
+    }),
+  );
+  return out.EvaluationResults?.[0]?.EvalDecision;
+}
 
 async function providerSnapshot() {
   const list = await iam.send(new ListOpenIDConnectProvidersCommand({}));
@@ -111,6 +136,43 @@ describe.runIf(ENABLED)("real AWS: bootstrap github", () => {
       expect(actions.some((a) => a.includes("*"))).toBe(false);
       expect(actions).toContain("sts:AssumeRole");
       log(`role policy actions: ${actions.join(", ")}`);
+
+      // 実際の評価（IAM ポリシーシミュレータ）: PR preview のシークレット・スタック・Flareon のロググループだけ
+      const acct = arn!.split(":")[4]!;
+      const secret = `arn:aws:secretsmanager:${REGION}:${acct}:secret:SessionSecretX-AbCdEf`;
+      const sm = "secretsmanager:GetSecretValue";
+      expect(
+        await decide(arn!, sm, secret, {
+          "flareon:stage": "preview",
+          "flareon:lifecycle": "ephemeral",
+        }),
+      ).toBe("allowed");
+      // 永続 stage の Cookie 署名鍵（prod、preview/current）は読めない
+      expect(await decide(arn!, sm, secret, { "flareon:stage": "prod" })).not.toBe("allowed");
+      expect(await decide(arn!, sm, secret, { "flareon:stage": "preview" })).not.toBe("allowed");
+      expect(await decide(arn!, sm, secret, { "flareon:app": "x" })).not.toBe("allowed");
+      const stackArn = (n: string) =>
+        `arn:aws:cloudformation:${REGION}:${acct}:stack/${n}/00000000-0000-0000-0000-000000000000`;
+      const delStack = "cloudformation:DeleteStack";
+      expect(await decide(arn!, delStack, stackArn("flareon-myapp-preview-pr-12"))).toBe("allowed");
+      expect(await decide(arn!, delStack, stackArn("flareon-myapp-prod-current"))).not.toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, delStack, stackArn("flareon-myapp-prod"))).not.toBe("allowed");
+      expect(await decide(arn!, delStack, stackArn("flareon-myapp-preview-current"))).not.toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, delStack, stackArn(stack))).not.toBe("allowed");
+      const group = (n: string) => `arn:aws:logs:${REGION}:${acct}:log-group:${n}`;
+      const lg = "flareon-myapp-prod-current-AppLogsABC-xyz";
+      expect(await decide(arn!, "logs:StartLiveTail", group(lg))).toBe("allowed");
+      expect(await decide(arn!, "logs:FilterLogEvents", `${group(lg)}:*`)).toBe("allowed");
+      expect(await decide(arn!, "logs:StartLiveTail", group("/aws/lambda/other"))).not.toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, "logs:FilterLogEvents", `${group("other-app")}:*`)).not.toBe(
+        "allowed",
+      );
 
       // 再実行は冪等（変更なしで成功する）
       const again = await cli(["bootstrap", "github", "--repo", slug], dir);

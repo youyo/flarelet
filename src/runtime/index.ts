@@ -44,8 +44,13 @@ function header(h: HeaderBag, name: string): string | undefined {
   return undefined;
 }
 
-/** Flareon front auth が付与する x-flareon-* ヘッダからユーザーを取り出す。未認証なら null。 */
-export function identity(headers: HeaderBag): Identity | null {
+/**
+ * Flareon front auth が付与する x-flareon-* ヘッダからユーザーを取り出す。未認証なら null。
+ * `http.auth: false`（FLAREON_AUTH_ENABLED=false）では front auth が無くクライアントのヘッダがそのまま届くので、
+ * ヘッダに関わらず常に null を返す。
+ */
+export function identity(headers: HeaderBag, env: Env = process.env): Identity | null {
+  if (env.FLAREON_AUTH_ENABLED === "false") return null;
   const sub = header(headers, "x-flareon-user-sub");
   if (!sub) return null;
   return {

@@ -267,7 +267,7 @@ describe("flareon dev (offline, python)", () => {
     expect(reloaded.marker).toBe("py2");
     expect(r.out()).toMatch(/Change detected \(main\.py\), restarting/);
 
-    // __pycache__ の書き込みでは再起動しない（uvicorn 起動で .pyc が作られても再起動ループにならない）
+    // 起動後に変更が無ければ再起動しない（__pycache__ 等の無視パスの書き込みで再起動ループにならない）
     const restarts = (r.out().match(/restarting/g) ?? []).length;
     await new Promise((res) => setTimeout(res, 1000));
     expect((r.out().match(/restarting/g) ?? []).length).toBe(restarts);

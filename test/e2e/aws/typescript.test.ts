@@ -71,6 +71,14 @@ http: { auth: false }
         message: "hello from flareon",
         version: "current",
       });
+
+      // auth: false は front auth が無い。アプリには FLAREON_AUTH_ENABLED=false が渡る（identity() は常に null）
+      const who = await get(`${url}/whoami`);
+      expect(who.status).toBe(200);
+      expect(await who.json()).toMatchObject({ authEnabled: "false" });
+      // CI ロールの Logs 権限（log-group:flareon-*）が実際のロググループ名に一致すること
+      const outputs = await stackOutputs(`flareon-${app}-prod-current`);
+      expect(outputs?.AppLogGroup).toMatch(/^flareon-/);
     },
     LONG,
   );

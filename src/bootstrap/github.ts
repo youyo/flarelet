@@ -89,11 +89,12 @@ function rolePolicy(account: string, region: string, qualifier: string): iam.Pol
       resources: ["*"],
       conditions: { StringEquals: { "aws:RequestedRegion": region } },
     }),
-    // destroy（PR プレビューの削除）。Flareon のアプリスタックだけ
+    // destroy --ci（PR closed）で消すのは PR preview（`flareon-<app>-preview-pr-<N>`）だけ。
+    // 永続 stage / version の削除は手元の認証情報で行う
     new iam.PolicyStatement({
       sid: "DeleteFlareonStacks",
       actions: ["cloudformation:DeleteStack"],
-      resources: [stack("flareon-*")],
+      resources: [stack("flareon-*-preview-pr-*")],
     }),
     new iam.PolicyStatement({
       sid: "ProtectBootstrapStacks",
@@ -110,20 +111,27 @@ function rolePolicy(account: string, region: string, qualifier: string): iam.Pol
         `arn:aws:ssm:${region}:${account}:parameter/cdk-bootstrap/${qualifier}/version`,
       ],
     }),
-    // PR プレビューの Preview Auth トークン（flareon:app タグ付きのシークレットだけ）
+    // PR プレビューの Preview Auth トークン。PR preview のシークレット（flareon:stage=preview かつ
+    // flareon:lifecycle=ephemeral）だけ。永続 stage（preview/current を含む）の Cookie 署名鍵は読めない
     new iam.PolicyStatement({
       sid: "ReadPreviewTokens",
       actions: ["secretsmanager:GetSecretValue"],
       resources: [`arn:aws:secretsmanager:${region}:${account}:secret:*`],
-      conditions: { Null: { "aws:ResourceTag/flareon:app": "false" } },
+      conditions: {
+        StringEquals: {
+          "aws:ResourceTag/flareon:stage": "preview",
+          "aws:ResourceTag/flareon:lifecycle": "ephemeral",
+        },
+      },
     }),
-    // flareon logs
+    // flareon logs。Flareon の Lambda のロググループは CloudFormation の自動命名（スタック名 flareon-... で始まる）。
+    // StartLiveTail はロググループ ARN（末尾 :* なし）、FilterLogEvents は :* 付きで評価されるので両方を書く
     new iam.PolicyStatement({
       sid: "ReadLogs",
       actions: ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:StartLiveTail"],
       resources: [
-        `arn:aws:logs:${region}:${account}:log-group:*`,
-        `arn:aws:logs:${region}:${account}:log-group:*:*`,
+        `arn:aws:logs:${region}:${account}:log-group:flareon-*`,
+        `arn:aws:logs:${region}:${account}:log-group:flareon-*:*`,
       ],
     }),
   ];

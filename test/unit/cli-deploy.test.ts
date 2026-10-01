@@ -100,6 +100,22 @@ describe("runDeploy", () => {
     expect(out).toContain("flareon env url --pr 3 --with-token");
   });
 
+  it("forces Preview Auth on pull request previews even with http.auth: false", async () => {
+    h = await harness(`version: 1
+name: myapp
+runtime: { language: python }
+http: { auth: false }
+`);
+    h.deployer.result = [
+      { name: "flareon-myapp-preview-pr-4", outputs: { ApiUrl: "https://p.example" } },
+    ];
+    expect(await runDeploy({ file: h.file, pr: 4 }, h.deps)).toBe(0);
+    const out = h.out.join("\n");
+    expect(out).toContain("  Auth  preview token (forced for pull request previews)");
+    expect(out).not.toContain("none (public)");
+    expect(out).toContain("flareon env url --pr 4 --with-token");
+  });
+
   it("shows failures in Flareon terms and exits 1", async () => {
     h = await harness(YAML);
     h.deployer.events = [
@@ -169,6 +185,29 @@ http: { auth: false }
     expect(out).toContain("  = application version v1");
     expect(out).toContain("  = public endpoint (no authentication)");
     expect(out).toContain("No changes");
+  });
+
+  it("does not treat a forced preview auth as an existing public endpoint", async () => {
+    h = await harness(`version: 1
+name: myapp
+runtime: { language: python }
+http: { auth: false }
+`);
+    const tpl = {
+      Resources: { F: res("flareon-myapp-preview-pr-4/AppFunction/Resource", { k: 1 }) },
+    };
+    h.synthTemplates.set("flareon-myapp-preview-pr-4", {
+      Resources: {
+        F: res("flareon-myapp-preview-pr-4/AppFunction/Resource", { k: 1 }),
+        A: res("flareon-myapp-preview-pr-4/FrontAuthFunction/Resource", { k: 1 }),
+      },
+    });
+    h.cloud.addStack({ name: "flareon-myapp-preview-pr-4" });
+    h.cloud.templates.set("flareon-myapp-preview-pr-4", tpl);
+    expect(await runPlan({ file: h.file, pr: 4 }, h.deps)).toBe(0);
+    const out = h.out.join("\n");
+    expect(out).toContain("  + preview authentication (forced for pull request previews)");
+    expect(out).not.toContain("public endpoint");
   });
 
   it("falls back to an offline plan when AWS is unreachable", async () => {

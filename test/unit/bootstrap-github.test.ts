@@ -152,8 +152,39 @@ describe("synthGithubBootstrap", () => {
     const deny = stmts.find((s) => s.Effect === "Deny");
     expect(deny.Action).toContain("cloudformation:DeleteStack");
     expect(JSON.stringify(deny.Resource)).toContain("stack/flareon-bootstrap-*/*");
+    // CI が消すのは PR preview だけ（destroy --ci は PR closed のみ）。永続 stage / version は消せない
     const del = allows.find((s) => s.Action === "cloudformation:DeleteStack");
-    expect(JSON.stringify(del.Resource)).toContain("stack/flareon-*/*");
+    expect(del.Resource).toEqual(
+      "arn:aws:cloudformation:ap-northeast-1:123456789012:stack/flareon-*-preview-pr-*/*",
+    );
+  });
+
+  it("reads only PR preview secrets (never a persistent stage's cookie signing key)", async () => {
+    const { tpl } = await synth(false);
+    const t = await tpl("flareon-bootstrap-github-youyo-flareon");
+    const [policy] = byType(t, "AWS::IAM::Policy");
+    const stmts: any[] = policy.Properties.PolicyDocument.Statement;
+    const read = stmts.find((s) => s.Sid === "ReadPreviewTokens");
+    expect(read.Action).toBe("secretsmanager:GetSecretValue");
+    expect(read.Condition).toEqual({
+      StringEquals: {
+        "aws:ResourceTag/flareon:stage": "preview",
+        "aws:ResourceTag/flareon:lifecycle": "ephemeral",
+      },
+    });
+  });
+
+  it("reads only Flareon's Lambda log groups", async () => {
+    const { tpl } = await synth(false);
+    const t = await tpl("flareon-bootstrap-github-youyo-flareon");
+    const [policy] = byType(t, "AWS::IAM::Policy");
+    const stmts: any[] = policy.Properties.PolicyDocument.Statement;
+    const logs = stmts.find((s) => s.Sid === "ReadLogs");
+    // ロググループ名は CloudFormation の自動命名（スタック名 = flareon-<app>-... から始まる）
+    expect(logs.Resource).toEqual([
+      "arn:aws:logs:ap-northeast-1:123456789012:log-group:flareon-*",
+      "arn:aws:logs:ap-northeast-1:123456789012:log-group:flareon-*:*",
+    ]);
   });
 
   it("tags the stacks so they can be found and owned", async () => {

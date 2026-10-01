@@ -1,4 +1,5 @@
 export {
+  lifecycleOf,
   resolveDeployment,
   ResolveError,
   type Deployment,

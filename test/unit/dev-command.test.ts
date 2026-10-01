@@ -24,6 +24,9 @@ describe("devCommand: python", () => {
       cmd: "/x/python",
       args: ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "4567"],
       cwd: join(dir, "app"),
+      // .pyc を書かせない。.pyc の検証は mtime（秒）+ サイズなので、同じ秒に同じサイズで書き換えると
+      // 古いバイトコードが使われ、再起動しても変更が反映されない
+      env: { PYTHONDONTWRITEBYTECODE: "1" },
     });
   });
 

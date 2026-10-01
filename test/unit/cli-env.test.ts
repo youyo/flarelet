@@ -43,6 +43,11 @@ describe("env list", () => {
       // 古いスタック（lifecycle タグ無し）は version 名から推定する
       tags: { "flareon:app": "myapp", "flareon:stage": "preview", "flareon:version": "pr-13" },
     });
+    h.cloud.addStack({
+      name: "flareon-myapp-prod-pr-5",
+      // lifecycle タグ無しでも prod/pr-5（release/pr-5 由来など）は persistent
+      tags: { "flareon:app": "myapp", "flareon:stage": "prod", "flareon:version": "pr-5" },
+    });
     expect(await runEnvList({ file: h.file }, h.deps)).toBe(0);
     const lines = h.out.join("\n").split("\n");
     expect(lines[0]).toMatch(/^STAGE\s+VERSION\s+TYPE\s+BRANCH\s+STATUS\s+URL$/);
@@ -50,8 +55,9 @@ describe("env list", () => {
     expect(row("v1")).toMatch(/^prod\s+v1\s+persistent\s+release\/v1\s+ready\s+https:\/\/v1/);
     expect(row("pr-12")).toMatch(/^preview\s+pr-12\s+ephemeral\s+-\s+deploying\s+https/);
     expect(row("pr-13")).toMatch(/ephemeral\s+-\s+failed/);
+    expect(row("pr-5")).toMatch(/^prod\s+pr-5\s+persistent\s/);
     // stage スタックは行にしない
-    expect(lines.filter((l) => l.startsWith("prod"))).toHaveLength(1);
+    expect(lines.filter((l) => l.startsWith("prod"))).toHaveLength(2);
   });
 
   it("says so when nothing is deployed", async () => {

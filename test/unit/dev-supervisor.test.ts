@@ -24,7 +24,13 @@ class FakeChild extends EventEmitter implements ChildLike {
   }
 }
 
-function setup(o: { prepare?: () => Promise<void>; stubborn?: boolean } = {}) {
+function setup(
+  o: {
+    prepare?: () => Promise<void>;
+    stubborn?: boolean;
+    commandEnv?: Record<string, string>;
+  } = {},
+) {
   const children: FakeChild[] = [];
   let onChange: ((f: string) => void) | undefined;
   let closed = false;
@@ -49,7 +55,12 @@ function setup(o: { prepare?: () => Promise<void>; stubborn?: boolean } = {}) {
       watchDir: "/app/app",
       command: async () => {
         await o.prepare?.();
-        return { cmd: "python", args: ["-m", "uvicorn"], cwd: "/app/app" };
+        return {
+          cmd: "python",
+          args: ["-m", "uvicorn"],
+          cwd: "/app/app",
+          ...(o.commandEnv ? { env: o.commandEnv } : {}),
+        };
       },
       env: { PORT: "9999", X: "1" },
       log: (l) => logs.push(l),
@@ -77,6 +88,16 @@ describe("supervisor", () => {
     expect(s.children).toHaveLength(1);
     expect(s.children[0]!.cmd).toBe("python");
     expect(s.children[0]!.opts).toEqual({ cwd: "/app/app", env: { PORT: "9999", X: "1" } });
+  });
+
+  it("adds the command's own environment (e.g. PYTHONDONTWRITEBYTECODE) on top", async () => {
+    const s = setup({ commandEnv: { PYTHONDONTWRITEBYTECODE: "1", X: "2" } });
+    await s.sup.start();
+    expect(s.children[0]!.opts.env).toEqual({
+      PORT: "9999",
+      X: "2",
+      PYTHONDONTWRITEBYTECODE: "1",
+    });
   });
 
   it("restarts once after a burst of changes (debounced)", async () => {

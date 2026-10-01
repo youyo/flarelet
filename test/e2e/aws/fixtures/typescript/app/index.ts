@@ -15,6 +15,8 @@ app.get("/whoami", (c) =>
     sub: c.req.header("x-flareon-user-sub") ?? null,
     mode: c.req.header("x-flareon-auth-mode") ?? null,
     table: process.env.FLAREON_DATABASE_MAIN_TABLE ?? null,
+    // front auth が x-flareon-* を剥がしているか（false なら flareon/runtime の identity() は常に null）
+    authEnabled: process.env.FLAREON_AUTH_ENABLED ?? null,
     version: process.env.FLAREON_VERSION,
   }),
 );

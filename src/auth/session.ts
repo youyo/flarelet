@@ -1,7 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ApiEvent, AuthMode, Identity } from "./types.js";
 
-export const SESSION_COOKIE = "__flareon_session";
+/**
+ * `__Host-` プレフィックス: ブラウザが Secure・Path=/・Domain なしの場合だけ受け付ける
+ * （同一サイトの別ホストや非 HTTPS からの上書き・注入を防ぐ）。
+ */
+export const SESSION_COOKIE = "__Host-flareon_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
 const COOKIE_ATTRS = "HttpOnly; Secure; SameSite=Lax";

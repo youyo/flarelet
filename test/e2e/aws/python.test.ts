@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SESSION_COOKIE } from "../../../src/auth/session.js";
 import {
   cli,
   ENABLED,
@@ -247,7 +248,7 @@ git:
         expect(await page.textContent("body")).toContain(outsider);
         expect(await page.locator('a[href="/__flareon/auth/logout"]').count()).toBe(1);
         const cookies = await other.cookies(url);
-        expect(cookies.map((c) => c.name)).not.toContain("__flareon_session");
+        expect(cookies.map((c) => c.name)).not.toContain(SESSION_COOKIE);
         // セッションが無いので API は 401 のまま
         const api = await other.request.get(`${url}/whoami`, {
           headers: { accept: "application/json" },

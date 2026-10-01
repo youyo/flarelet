@@ -92,6 +92,8 @@ describe("flareon dev (default: preview/local-<user>)", () => {
       FLAREON_DATABASE_MAIN_TABLE: "dev-table",
       FLAREON_STORAGE_FILES_BUCKET: "dev-bucket",
       API_KEY: "s3cr3t-value",
+      // ローカルのプロキシは常にクライアント由来の x-flareon-* を剥がす（--as のときだけ付け直す）
+      FLAREON_AUTH_ENABLED: "true",
     });
     expect(s.env.FLAREON_AI_HAIKU_MODEL_ID).toMatch(/haiku/);
     expect(s.env.OTHER_KEY).toBeUndefined();

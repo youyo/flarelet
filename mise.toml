@@ -29,6 +29,11 @@ description = "E2E テスト（ビルド済み CLI を実行）"
 depends = ["build", "test:e2e:python-env"]
 run = "vitest run test/e2e --exclude 'test/e2e/aws/**'"
 
+[tasks."test:e2e:file"]
+description = "常時 E2E を指定ファイルだけ実行（例: mise run test:e2e:file test/e2e/dev.test.ts）"
+depends = ["build", "test:e2e:python-env"]
+run = "vitest run"
+
 [tasks."test:e2e:aws"]
 description = "実 AWS E2E（FLAREON_E2E_AWS=1 のときだけ実行。deploy → 検証 → destroy）"
 depends = ["build", "playwright:install"]

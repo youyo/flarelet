@@ -165,3 +165,31 @@ describe("resolveDeployment: CLI args", () => {
     expect(() => resolveDeployment({ git: defaults, ref: branch("main") })).toThrow(ResolveError);
   });
 });
+
+describe("resolveDeployment: ephemeral only for PR previews (preview/pr-N)", () => {
+  it("release/pr-5 resolves to prod/pr-5 and stays persistent", () => {
+    expect(
+      resolveDeployment({ git: personal, defaultBranch: "main", ref: branch("release/pr-5") }),
+    ).toEqual({ stage: "prod", version: "pr-5", lifecycle: "persistent" });
+  });
+  it("--pr 5 -> preview/pr-5 (ephemeral)", () => {
+    expect(resolveDeployment({ git: defaults, defaultBranch: "main", ref: pr(5) })).toEqual({
+      stage: "preview",
+      version: "pr-5",
+      lifecycle: "ephemeral",
+    });
+  });
+  it("explicit --stage preview --version pr-5 names the PR preview (same as --pr 5)", () => {
+    expect(resolveDeployment({ git: defaults, stage: "preview", version: "pr-5" })).toEqual(
+      resolveDeployment({ git: defaults, defaultBranch: "main", ref: pr(5) }),
+    );
+  });
+  it("pr-N under any other stage is an ordinary persistent version", () => {
+    expect(resolveDeployment({ git: defaults, stage: "prod", version: "pr-5" }).lifecycle).toBe(
+      "persistent",
+    );
+    expect(
+      resolveDeployment({ git: defaults, stage: "staging", defaultBranch: "main", ref: pr(5) }),
+    ).toEqual({ stage: "staging", version: "pr-5", lifecycle: "persistent" });
+  });
+});

@@ -71,6 +71,10 @@ describe("session cookie", () => {
   it("属性付きの Set-Cookie を発行する", () => {
     const c = issueSessionCookie({ sub: "u1", email: "a@b.c" }, "cognito", SESSION_KEY, NOW);
     expect(c.startsWith(`${SESSION_COOKIE}=`)).toBe(true);
+    // __Host- プレフィックス: Secure・Path=/・Domain なしをブラウザに強制させる（サブドメイン等からの上書きを防ぐ）
+    expect(SESSION_COOKIE).toBe("__Host-flareon_session");
+    expect(c).not.toMatch(/Domain=/i);
+    expect(c).toMatch(/; Path=\/(;|$)/);
     expect(c).toContain("HttpOnly");
     expect(c).toContain("Secure");
     expect(c).toContain("SameSite=Lax");
@@ -108,6 +112,8 @@ describe("session cookie", () => {
     const c = clearSessionCookie();
     expect(c).toContain(`${SESSION_COOKIE}=;`);
     expect(c).toContain("Max-Age=0");
+    expect(c).toContain("Secure");
+    expect(c).toMatch(/; Path=\/(;|$)/);
     expect(c).toContain("HttpOnly");
   });
 });

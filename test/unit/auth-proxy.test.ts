@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { invokeApp } from "../../src/auth/proxy.js";
+import { SESSION_COOKIE } from "../../src/auth/session.js";
 import { makeDeps, makeEvent } from "./auth-fixtures.js";
 
 const ident = { sub: "u1", email: "a@b.c" };
@@ -45,8 +46,8 @@ describe("invokeApp", () => {
   it("セッション Cookie は app に渡さない", async () => {
     const deps = await makeDeps();
     const ev = makeEvent({
-      cookies: ["__flareon_session=abc", "keep=1"],
-      headers: { cookie: "__flareon_session=abc; keep=1" },
+      cookies: [`${SESSION_COOKIE}=abc`, "keep=1"],
+      headers: { cookie: `${SESSION_COOKIE}=abc; keep=1` },
     });
     await invokeApp(ev, ident, "cognito", { appFunctionName: "f", deps });
     const sent = JSON.parse(deps.invocations[0]!.payload);

@@ -48,6 +48,9 @@ export async function devCommand(
       cmd: python,
       args: ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(port)],
       cwd: src,
+      // .pyc を書かない。.pyc の鮮度判定はソースの mtime（秒単位）とサイズなので、同じ秒に同じサイズで
+      // 書き換えると古いバイトコードが使われ、再起動しても変更が反映されないことがある
+      env: { PYTHONDONTWRITEBYTECODE: "1" },
     };
   }
   const entry = join(src, "index.ts");

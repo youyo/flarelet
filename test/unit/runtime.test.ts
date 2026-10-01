@@ -42,4 +42,23 @@ describe("runtime bindings", () => {
     expect(identity({})).toBeNull();
     expect(identity({ "x-flareon-auth-mode": "cognito" })).toBeNull();
   });
+
+  it("never trusts x-flareon-* headers when the app is public (FLAREON_AUTH_ENABLED=false)", () => {
+    // auth: false では front auth Lambda が無く、クライアントが送ったヘッダがそのまま届くため
+    const forged = { "x-flareon-user-sub": "admin", "x-flareon-user-email": "admin@example.com" };
+    expect(identity(forged, { FLAREON_AUTH_ENABLED: "false" })).toBeNull();
+    expect(identity(forged, { FLAREON_AUTH_ENABLED: "true" })).toMatchObject({ sub: "admin" });
+    expect(identity(forged, {})).toMatchObject({ sub: "admin" });
+  });
+
+  it("reads FLAREON_AUTH_ENABLED from process.env by default", () => {
+    const prev = process.env.FLAREON_AUTH_ENABLED;
+    process.env.FLAREON_AUTH_ENABLED = "false";
+    try {
+      expect(identity({ "x-flareon-user-sub": "admin" })).toBeNull();
+    } finally {
+      if (prev === undefined) delete process.env.FLAREON_AUTH_ENABLED;
+      else process.env.FLAREON_AUTH_ENABLED = prev;
+    }
+  });
 });

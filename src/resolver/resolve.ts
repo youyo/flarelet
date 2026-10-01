@@ -8,7 +8,11 @@ export type Lifecycle = "persistent" | "ephemeral";
 export interface Deployment {
   stage: string;
   version: string;
-  /** PR preview（pr-N）は ephemeral、それ以外は persistent。 */
+  /**
+   * PR preview（`preview/pr-N`）だけ ephemeral、それ以外は persistent。
+   * `preview/pr-N` は PR preview の予約名で、`--stage preview --version pr-N` の明示も同じ扱い
+   * （スタック名が同一なので、persistent として作ると既存の PR preview の構成を置き換えてしまう）。
+   */
   lifecycle: Lifecycle;
 }
 
@@ -33,8 +37,9 @@ const STAGE_PROD = "prod";
 const STAGE_PREVIEW = "preview";
 const PR_VERSION = /^pr-\d+$/;
 
-const lifecycleOf = (version: string): Lifecycle =>
-  PR_VERSION.test(version) ? "ephemeral" : "persistent";
+/** ephemeral は `preview/pr-N` のみ。`release/pr-5` → `prod/pr-5` などは persistent。 */
+export const lifecycleOf = (stage: string, version: string): Lifecycle =>
+  stage === STAGE_PREVIEW && PR_VERSION.test(version) ? "ephemeral" : "persistent";
 
 const escapeRegex = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
 
@@ -94,7 +99,7 @@ function resolveFromGit(git: GitIR, ref: GitRef, defaultBranch: string | undefin
       git.production.version === "branch"
         ? versionFromBranch(ref.name, prod.capture)
         : git.production.version;
-    return { stage: STAGE_PROD, version, lifecycle: lifecycleOf(version) };
+    return { stage: STAGE_PROD, version, lifecycle: lifecycleOf(STAGE_PROD, version) };
   }
   if (git.preview && branchMatches(git.preview.branch, ref.name, defaultBranch).matched) {
     return { stage: STAGE_PREVIEW, version: "current", lifecycle: "persistent" };
@@ -120,7 +125,11 @@ export function resolveDeployment(input: ResolveInput): Deployment {
   }
 
   if (input.stage !== undefined && input.version !== undefined) {
-    return { stage: input.stage, version: input.version, lifecycle: lifecycleOf(input.version) };
+    return {
+      stage: input.stage,
+      version: input.version,
+      lifecycle: lifecycleOf(input.stage, input.version),
+    };
   }
 
   if (input.stage !== undefined) {
@@ -133,7 +142,7 @@ export function resolveDeployment(input: ResolveInput): Deployment {
         if (!(e instanceof ResolveError)) throw e;
       }
     }
-    return { stage: input.stage, version, lifecycle: lifecycleOf(version) };
+    return { stage: input.stage, version, lifecycle: lifecycleOf(input.stage, version) };
   }
 
   if (!ref) {
@@ -143,7 +152,11 @@ export function resolveDeployment(input: ResolveInput): Deployment {
   }
   const resolved = resolveFromGit(git, ref, defaultBranch);
   if (input.version !== undefined) {
-    return { ...resolved, version: input.version, lifecycle: lifecycleOf(input.version) };
+    return {
+      ...resolved,
+      version: input.version,
+      lifecycle: lifecycleOf(resolved.stage, input.version),
+    };
   }
   return resolved;
 }

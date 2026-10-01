@@ -228,6 +228,8 @@ export async function runDev(args: DevArgs, deps: DevDeps): Promise<number> {
     ...definedEnv(deps.env),
     AWS_REGION: region,
     FLAREON_DEV: "1",
+    // ローカルのプロキシは常にクライアント由来の x-flareon-* を剥がす（Lambda の front auth と同じ扱い）
+    FLAREON_AUTH_ENABLED: "true",
     FLAREON_APP: ir.name,
     FLAREON_STAGE: d.stage,
     FLAREON_VERSION: d.version,

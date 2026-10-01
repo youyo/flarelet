@@ -14,7 +14,8 @@ import {
 } from "./session.js";
 import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
-export const FLOW_COOKIE = "__flareon_flow";
+/** Path を /__flareon/auth に絞るため `__Host-` は使えない。`__Secure-` で Secure を強制する。 */
+export const FLOW_COOKIE = "__Secure-flareon_flow";
 const FLOW_TTL_SECONDS = 10 * 60;
 const FLOW_COOKIE_PATH = "/__flareon/auth";
 export const CALLBACK_PATH = "/__flareon/auth/callback";
