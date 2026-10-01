@@ -23,7 +23,7 @@
     "deploy"
   ],
   "bin": {
-    "flarelet": "./dist/cli/index.js"
+    "flarelet": "dist/cli/index.js"
   },
   "exports": {
     ".": {
