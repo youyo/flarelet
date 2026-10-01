@@ -3,3 +3,5 @@ dist
 .flarelet/
 *.tsbuildinfo
 mise.local.toml
+.claude/handover/
+.claude/settings.local.json
