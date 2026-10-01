@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AI_MODEL_NAMES, isKnownModel } from "../constructs/ai-models.js";
 import {
   APP_NAME_MIN,
   NAME_MAX,
@@ -77,10 +78,11 @@ const ai = z.strictObject({
     .array(
       z
         .string()
-        .regex(
-          /^[a-z0-9][a-z0-9.-]*$/,
-          "must be a logical model name such as sonnet or nova-micro",
-        ),
+        .regex(/^[a-z0-9][a-z0-9.-]*$/, "must be a logical model name such as sonnet or nova-micro")
+        .refine(isKnownModel, {
+          error: (iss) =>
+            `unknown AI model ${JSON.stringify(iss.input)} (known: ${AI_MODEL_NAMES.join(", ")})`,
+        }),
     )
     .refine((a) => new Set(a).size === a.length, { error: "must not contain duplicates" }),
 });

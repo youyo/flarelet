@@ -1,0 +1,32 @@
+version: 1
+
+name: py-notes
+
+runtime:
+  language: python
+  version: "3.13"
+
+http:
+  auth: true
+
+database:
+  notes: {}
+
+storage:
+  attachments: {}
+
+ai:
+  models:
+    - sonnet
+    - nova-micro
+
+secrets:
+  - EXTERNAL_API_KEY
+
+git:
+  production:
+    branch: "release/*"
+    version: branch
+  preview:
+    branch: default
+  pullRequests: true

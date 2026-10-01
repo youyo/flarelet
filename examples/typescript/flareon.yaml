@@ -1,0 +1,22 @@
+version: 1
+
+name: ts-notes
+
+runtime:
+  language: typescript
+
+http:
+  auth: true
+
+database:
+  notes: {}
+
+storage:
+  attachments: {}
+
+ai:
+  models:
+    - haiku
+
+secrets:
+  - EXTERNAL_API_KEY

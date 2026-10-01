@@ -24,7 +24,14 @@
     "node": ">=24"
   },
   "dependencies": {
+    "@aws-cdk/toolkit-lib": "^1.42.1",
+    "@aws-sdk/client-lambda": "^3.1144.0",
+    "@aws-sdk/client-secrets-manager": "^3.1144.0",
+    "aws-cdk-lib": "^2.272.0",
     "commander": "^15.0.0",
+    "constructs": "^10.8.1",
+    "esbuild": "^0.28.2",
+    "jose": "^6.2.12",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },

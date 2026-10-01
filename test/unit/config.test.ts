@@ -137,6 +137,16 @@ describe("parseConfig: errors carry paths", () => {
     expect(issues.map((i) => i.path).sort()).toEqual(["ai.models", "secrets"]);
   });
 
+  it("rejects AI model names that are not in the registry", () => {
+    const issues = fail(
+      "version: 1\nname: myapp\nruntime: { language: python }\nai: { models: [sonnet, gpt-9] }\n",
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.path).toBe("ai.models.1");
+    expect(issues[0]?.message).toContain("unknown AI model");
+    expect(issues[0]?.message).toContain("nova-micro");
+  });
+
   it("requires git.production.branch", () => {
     const issues = fail(
       "version: 1\nname: myapp\nruntime: { language: python }\ngit:\n  production:\n    version: branch\n",
