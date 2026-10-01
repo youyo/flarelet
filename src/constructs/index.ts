@@ -8,7 +8,7 @@ export {
   type BuildOptions,
   type BuiltApp,
 } from "./app.js";
-export { domainPrefix, secretsPath, stackNames } from "./names.js";
+export { domainPrefix, idpSecretName, secretsPath, stackNames } from "./names.js";
 export {
   AI_MODEL_NAMES,
   isKnownModel,
@@ -19,8 +19,8 @@ export {
 
 export interface SynthesizedStack {
   name: string;
-  /** stage: 永続ステージのリソース、version: バージョン固有、preview: PR preview の全部入り。 */
-  kind: "stage" | "version" | "preview";
+  /** stage: 永続ステージのリソース、version: バージョン固有、preview: PR preview の全部入り、dev: flareon dev 用。 */
+  kind: "stage" | "version" | "preview" | "dev";
 }
 
 export interface SynthResult {

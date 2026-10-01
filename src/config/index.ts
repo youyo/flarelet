@@ -1,4 +1,9 @@
-export { configSchema, AUTH_PROVIDERS, type FlareonConfig } from "./schema.js";
+export {
+  configSchema,
+  AUTH_PROVIDERS,
+  SUPPORTED_AUTH_PROVIDERS,
+  type FlareonConfig,
+} from "./schema.js";
 export {
   parseConfig,
   loadConfigFile,

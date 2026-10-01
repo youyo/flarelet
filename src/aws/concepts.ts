@@ -15,7 +15,14 @@ export interface CfnTemplate {
   [k: string]: unknown;
 }
 
-const AUTH = new Set(["UserPool", "SessionSecret", "Client", "Branding", "PreviewToken"]);
+const AUTH = new Set([
+  "UserPool",
+  "SessionSecret",
+  "Client",
+  "Branding",
+  "PreviewToken",
+  "IdentityProvider",
+]);
 const APPLICATION = new Set([
   "AppFunction",
   "AppLogs",

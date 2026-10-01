@@ -36,7 +36,8 @@ function writeLauncher(dir: string, language: RuntimeLanguage): void {
 const nodeBanner =
   "import { createRequire as __flareonCreateRequire } from 'node:module';const require = __flareonCreateRequire(import.meta.url);";
 
-function esbuildToMjs(entry: string, outfile: string): void {
+/** Lambda 向け: AWS SDK v3 はランタイム同梱なので外部扱い。 */
+function esbuildToMjs(entry: string, outfile: string, external: string[] = ["@aws-sdk/*"]): void {
   buildSync({
     entryPoints: [entry],
     outfile,
@@ -44,7 +45,7 @@ function esbuildToMjs(entry: string, outfile: string): void {
     platform: "node",
     target: "node24",
     format: "esm",
-    external: ["@aws-sdk/*"],
+    external,
     banner: { js: nodeBanner },
     legalComments: "none",
     logLevel: "silent",
@@ -143,4 +144,13 @@ export function frontAuthCode(cacheDir: string): lambda.Code {
   rmSync(dir, { recursive: true, force: true });
   bundleFrontAuth(dir);
   return lambda.Code.fromAsset(dir);
+}
+
+/**
+ * `flareon dev` 向け: app/index.ts を依存ごと 1 ファイルにバンドルする（本番と同じ esbuild 経路）。
+ * ローカルには AWS SDK が同梱されていないので、アプリの node_modules から取り込む。
+ */
+export function bundleDevApp(entry: string, outfile: string): void {
+  mkdirSync(dirname(outfile), { recursive: true });
+  esbuildToMjs(entry, outfile, []);
 }

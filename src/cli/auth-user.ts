@@ -17,7 +17,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function userPool(
   args: SynthArgs,
   deps: OpsDeps,
-): Promise<{ cloud: Cloud; pool: string; stage: string } | null> {
+): Promise<{ cloud: Cloud; pool: string; stage: string; provider: string } | null> {
   const t = await resolveTarget(args, deps);
   if (!t) return null;
   const { io } = deps;
@@ -40,7 +40,7 @@ async function userPool(
     );
     return null;
   }
-  return { cloud, pool, stage: t.deployment.stage };
+  return { cloud, pool, stage: t.deployment.stage, provider: t.ir.http.auth.provider };
 }
 
 export async function runUserAdd(args: UserArgs, deps: OpsDeps): Promise<number> {
@@ -51,6 +51,12 @@ export async function runUserAdd(args: UserArgs, deps: OpsDeps): Promise<number>
   try {
     const p = await userPool(args, deps);
     if (!p) return 1;
+    if (p.provider !== "cognito") {
+      // 外部 IdP の stage では app client が COGNITO を受け付けない（DECISIONS.md）
+      deps.io.stderr(
+        `Warning: ${p.stage} signs in with http.auth.provider: ${p.provider}; invited users cannot sign in there (users sign in with their ${p.provider} account instead)`,
+      );
+    }
     await p.cloud.createUser(p.pool, args.email);
     deps.io.stdout(
       `Invited ${args.email} to ${p.stage}; a temporary password was sent by email (it must be changed at first sign-in)`,

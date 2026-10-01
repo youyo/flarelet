@@ -1,5 +1,6 @@
 [tools]
 node = "24"
+python = "3.13"
 
 [tasks.typecheck]
 description = "型チェック"
@@ -13,15 +14,30 @@ run = "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/index.js"
 description = "Unit テスト"
 run = "vitest run test/unit"
 
+[tasks."test:e2e:python-env"]
+description = "flareon dev（python）の E2E 用 venv を .flareon/e2e-python に用意（初回のみ pip でネットワークを使う）"
+sources = ["test/e2e/python/requirements.txt"]
+outputs = [".flareon/e2e-python/.installed"]
+run = [
+  "python -m venv .flareon/e2e-python",
+  ".flareon/e2e-python/bin/python -m pip install --quiet --disable-pip-version-check -r test/e2e/python/requirements.txt",
+  "touch .flareon/e2e-python/.installed",
+]
+
 [tasks."test:e2e"]
 description = "E2E テスト（ビルド済み CLI を実行）"
-depends = ["build"]
+depends = ["build", "test:e2e:python-env"]
 run = "vitest run test/e2e --exclude 'test/e2e/aws/**'"
 
 [tasks."test:e2e:aws"]
 description = "実 AWS E2E（FLAREON_E2E_AWS=1 のときだけ実行。deploy → 検証 → destroy）"
 depends = ["build", "playwright:install"]
 run = "vitest run test/e2e/aws"
+
+[tasks."test:e2e:aws:file"]
+description = "実 AWS E2E を指定ファイルだけ実行（例: mise run test:e2e:aws:file test/e2e/aws/logs-follow.test.ts）"
+depends = ["build", "playwright:install"]
+run = "vitest run"
 
 [tasks."playwright:install"]
 description = "E2E 用の Chromium を取得"

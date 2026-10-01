@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 生成された JSON/YAML を緩く検査する */
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { parseConfig } from "../../src/config/index.js";
 import { appNameFromDir, runInit } from "../../src/cli/init.js";
 
@@ -94,5 +96,80 @@ describe("runInit", () => {
     const t = io();
     expect(await runInit({ dir, runtime: "ruby" }, t.io)).toBe(1);
     expect(t.err.join("\n")).toMatch(/python|typescript/);
+  });
+});
+
+describe("runInit GitHub workflow", () => {
+  const wf = async (opts: Parameters<typeof runInit>[0]) => {
+    const t = io();
+    expect(await runInit(opts, t.io)).toBe(0);
+    return {
+      text: await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8"),
+      out: t.out,
+    };
+  };
+
+  it("generates a valid workflow with permissions, OIDC, concurrency and PR lifecycle", async () => {
+    const { text } = await wf({ dir, runtime: "python", defaultBranch: "trunk" });
+    const doc = parseYaml(text) as Record<string, any>;
+    expect(doc.permissions).toEqual({
+      "id-token": "write",
+      contents: "read",
+      "pull-requests": "write",
+      deployments: "write",
+    });
+    expect(doc.on.push.branches).toEqual(["trunk"]);
+    expect(doc.on.pull_request.types).toEqual(["opened", "synchronize", "reopened", "closed"]);
+    expect(doc.concurrency.group).toContain("github.event.pull_request.number");
+    expect(doc.concurrency["cancel-in-progress"]).toBe(false);
+    expect(Object.keys(doc.jobs)).toEqual(["deploy", "destroy"]);
+    expect(doc.jobs.deploy.if).toContain("closed");
+    expect(doc.jobs.destroy.if).toContain("closed");
+    // fork からの PR は OIDC / secrets が使えないので対象外
+    expect(doc.jobs.deploy.if).toContain("head.repo.full_name");
+    for (const job of Object.values<any>(doc.jobs)) {
+      const aws = job.steps.find((s: any) =>
+        String(s.uses).startsWith("aws-actions/configure-aws-credentials@"),
+      );
+      expect(aws.with["role-to-assume"]).toBe("${{ vars.FLAREON_AWS_ROLE_ARN }}");
+      expect(aws.with["aws-region"]).toBe("${{ vars.FLAREON_AWS_REGION }}");
+    }
+    expect(text).toContain("deploy --ci");
+    expect(text).toContain("destroy --ci");
+    expect(text).toContain("github comment --state ${{ steps.deploy.outcome == 'success'");
+    expect(text).toContain("github comment --state inactive");
+    expect(text).toContain("FLAREON_PACKAGE");
+    expect(text).not.toMatch(/AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID/);
+  });
+
+  it("installs app dependencies only for typescript apps", async () => {
+    const ts = await wf({ dir, runtime: "typescript" });
+    expect(ts.text).toContain("npm install");
+    expect(ts.text).toContain("branches: [main]");
+    const dir2 = await mkdtemp(join(tmpdir(), "flareon-init2-"));
+    try {
+      const t = io();
+      await runInit({ dir: dir2, runtime: "python" }, t.io);
+      expect(await readFile(join(dir2, ".github/workflows/flareon.yml"), "utf8")).not.toContain(
+        "npm install",
+      );
+    } finally {
+      await rm(dir2, { recursive: true, force: true });
+    }
+  });
+
+  it("never overwrites an existing workflow", async () => {
+    await mkdir(join(dir, ".github/workflows"), { recursive: true });
+    await writeFile(join(dir, ".github/workflows/flareon.yml"), "mine: true\n");
+    const t = io();
+    expect(await runInit({ dir, runtime: "python" }, t.io)).toBe(0);
+    expect(await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8")).toBe("mine: true\n");
+    expect(t.out.join("\n")).toMatch(/already exists/);
+  });
+
+  it("points to bootstrap and gh variable set in the next steps", async () => {
+    const { out } = await wf({ dir, runtime: "python" });
+    expect(out.join("\n")).toContain("flareon bootstrap github --repo");
+    expect(out.join("\n")).toContain("FLAREON_AWS_ROLE_ARN");
   });
 });

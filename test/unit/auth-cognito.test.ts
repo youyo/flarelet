@@ -162,3 +162,21 @@ describe("cognito logout", () => {
     expect(res.cookies!.some((c) => c.startsWith(`${SESSION_COOKIE}=;`))).toBe(true);
   });
 });
+
+describe("cognito login with an external identity provider", () => {
+  it("skips the provider chooser with identity_provider when configured", async () => {
+    const deps = await makeDeps();
+    const handler = createHandler(
+      { ...COGNITO_ENV, FLAREON_COGNITO_IDENTITY_PROVIDER: "Google" },
+      deps,
+    );
+    const res = await handler(makeEvent({ rawPath: "/__flareon/auth/login" }));
+    const loc = new URL(res.headers!.location!);
+    expect(loc.searchParams.get("identity_provider")).toBe("Google");
+  });
+
+  it("does not send identity_provider by default", async () => {
+    const { res } = await startLogin();
+    expect(new URL(res.headers!.location!).searchParams.has("identity_provider")).toBe(false);
+  });
+});

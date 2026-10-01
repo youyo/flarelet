@@ -22,11 +22,23 @@ export interface LogEvent {
   message: string;
 }
 
+export interface LiveLogEvent {
+  /** ロググループ名。 */
+  group: string;
+  timestamp: number;
+  message: string;
+}
+
 export interface UserInfo {
   email: string | undefined;
   status: string | undefined;
   enabled: boolean | undefined;
   created: Date | undefined;
+}
+
+export interface SecretInfo {
+  versionId: string;
+  lastChanged: Date | undefined;
 }
 
 export interface ParameterInfo {
@@ -40,6 +52,12 @@ export interface Cloud {
   describeStack(name: string): Promise<StackInfo | undefined>;
   /** `flareon:app` タグが app のスタック（削除済みを除く）。 */
   listAppStacks(app: string): Promise<StackInfo[]>;
+  /** 指定タグキーを持つスタック（削除済みを除く）。 */
+  listStacksWithTag(key: string): Promise<StackInfo[]>;
+  /** URL（https://host）の IAM OIDC プロバイダの ARN。無ければ undefined。 */
+  findOidcProvider(url: string): Promise<string | undefined>;
+  /** 信頼ポリシーが指定プロバイダを参照している IAM ロール名。 */
+  listRolesTrustingProvider(providerArn: string): Promise<string[]>;
   /** デプロイ済みテンプレート。スタックが無ければ undefined。 */
   getTemplate(name: string): Promise<CfnTemplate | undefined>;
   listStackResources(name: string): Promise<StackResource[]>;
@@ -59,10 +77,31 @@ export interface Cloud {
     startTime: number,
     nextToken?: string,
   ): Promise<{ events: LogEvent[]; nextToken?: string }>;
+  /**
+   * CloudWatch Logs Live Tail。セッション開始で onStarted、受信ごとに onEvent を呼ぶ。
+   * signal が中断されるか、セッションが終わる（最大 3 時間）と resolve する。使えない場合は reject。
+   * 未実装の Cloud では undefined（呼び出し側はポーリングにフォールバックする）。
+   */
+  liveTail?(
+    groups: string[],
+    onEvent: (e: LiveLogEvent) => void,
+    signal: AbortSignal,
+    onStarted: () => void,
+  ): Promise<void>;
   createUser(userPoolId: string, email: string): Promise<void>;
   listUsers(userPoolId: string): Promise<UserInfo[]>;
   /** 無ければ false。 */
   deleteUser(userPoolId: string, email: string): Promise<boolean>;
+  /** Secrets Manager のシークレットのメタデータ（値は返さない）。無い・削除予定なら undefined。 */
+  describeSecret(name: string): Promise<SecretInfo | undefined>;
+  /** Secrets Manager のシークレットを作成または更新する。 */
+  putSecret(name: string, value: string): Promise<void>;
+  /** 復旧期間なしで削除する。無ければ false。 */
+  deleteSecret(name: string): Promise<boolean>;
+  /** Lambda 関数の環境変数。 */
+  getFunctionEnv(name: string): Promise<Record<string, string>>;
+  /** path 直下の SecureString を復号して返す（キーは path からの相対名）。 */
+  getParameterValues(path: string): Promise<Record<string, string>>;
 }
 
 export interface DeployedStack {

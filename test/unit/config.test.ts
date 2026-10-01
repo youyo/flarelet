@@ -58,7 +58,7 @@ describe("parseConfig: valid", () => {
     "{ auth: false }",
     "{ auth: true }",
     "{ auth: { provider: google } }",
-    "{ auth: { provider: oidc } }",
+    '{ auth: { provider: oidc, issuer: "https://idp.example.com" } }',
   ])("accepts http: %s", (http) => {
     expect(() =>
       ok(`version: 1\nname: myapp\nruntime: { language: typescript }\nhttp: ${http}\n`),

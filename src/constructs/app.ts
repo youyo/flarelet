@@ -1,4 +1,13 @@
-import { App, Aws, CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import {
+  App,
+  Aws,
+  CfnOutput,
+  Duration,
+  RemovalPolicy,
+  SecretValue,
+  Stack,
+  type StackProps,
+} from "aws-cdk-lib";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as cognito from "aws-cdk-lib/aws-cognito";
@@ -8,14 +17,19 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { join } from "node:path";
 import type { Construct } from "constructs";
+import { idpSecretNames } from "../config/names.js";
 import type { FlareonIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 import { resolveModel, type ResolvedModel } from "./ai-models.js";
 import { Data, removalOf, type Lifetime } from "./data.js";
 import { LAUNCHER_HANDLER } from "./launcher.js";
-import { domainPrefix, secretsPath, stackNames } from "./names.js";
+import { domainPrefix, idpSecretName, secretsPath, stackNames } from "./names.js";
 import { appCode, frontAuthCode } from "./packaging.js";
+import { HD_CLAIM } from "../auth/allow.js";
+
+/** Entra ID の Cognito 上の IdP 名（Managed Login のボタン表示）。 */
+export const ENTRA_IDP_NAME = "EntraID";
 
 /** Lambda Web Adapter（arm64）。https://github.com/awslabs/aws-lambda-web-adapter#lambda-functions-packaged-as-zip-package-for-aws-managed-runtimes */
 export const LWA_ACCOUNT = "753240598075";
@@ -80,12 +94,86 @@ interface CognitoAuth {
   userPool: cognito.UserPool;
   domainPrefix: string;
   sessionSecret: secretsmanager.Secret;
+  /** 外部 IdP（Google / OIDC）。app client の SupportedIdentityProviders に使う。 */
+  identityProvider: { name: string; resource: cognito.IUserPoolIdentityProvider } | undefined;
 }
 
 interface StageStackProps extends StackProps {
   ir: FlareonIR;
   deployment: Deployment;
   account: string | undefined;
+  /** 外部 IdP の資格情報シークレットのバージョン ID（名前 → VersionId）。分かれば固定する。 */
+  idpSecretVersions: Record<string, string> | undefined;
+}
+
+/**
+ * 外部 IdP を stage の User Pool に追加する。client id / secret は Secrets Manager の動的参照で渡す
+ * （ssm-secure は Cognito IdP では使えない）。値はテンプレートに入らない。
+ * バージョン ID を固定すると、シークレットを更新したときにテンプレートが変わり IdP が更新される。
+ */
+function addIdentityProvider(
+  scope: Construct,
+  userPool: cognito.UserPool,
+  props: StageStackProps,
+): CognitoAuth["identityProvider"] {
+  const auth = props.ir.http?.auth;
+  if (!auth?.enabled || auth.provider === "cognito") return undefined;
+  const [idName, secretName] = idpSecretNames(auth.provider) as [string, string];
+  const ref = (name: string): SecretValue => {
+    const versionId = props.idpSecretVersions?.[name];
+    return SecretValue.secretsManager(idpSecretName(props.ir.name, props.deployment.stage, name), {
+      ...(versionId ? { versionId } : {}),
+    });
+  };
+  if (auth.provider === "google") {
+    const resource = new cognito.UserPoolIdentityProviderGoogle(scope, "IdentityProvider", {
+      userPool,
+      clientId: ref(idName).unsafeUnwrap(),
+      clientSecretValue: ref(secretName),
+      scopes: ["openid", "email", "profile"],
+      attributeMapping: {
+        email: cognito.ProviderAttribute.GOOGLE_EMAIL,
+        emailVerified: cognito.ProviderAttribute.GOOGLE_EMAIL_VERIFIED,
+        // Google Workspace の hosted domain。allow.domains の判定に使う（個人アカウントには無い）
+        custom: { [HD_CLAIM]: cognito.ProviderAttribute.other("hd") },
+      },
+    });
+    // providerName はトークン（Ref）になりクロススタック Export を生むので、固定名を使う
+    return { name: "Google", resource };
+  }
+  if (auth.provider === "entra") {
+    // Entra ID はシングルテナントの OIDC として扱う。issuer はテナント ID（GUID）形式（スキーマで検証済み）。
+    // Entra の id_token は email_verified を出さないのでマッピングしない。email が無い場合に備え preferred_username も取る
+    const resource = new cognito.UserPoolIdentityProviderOidc(scope, "IdentityProvider", {
+      userPool,
+      name: ENTRA_IDP_NAME,
+      issuerUrl: `https://login.microsoftonline.com/${auth.entra.tenant}/v2.0`,
+      clientId: ref(idName).unsafeUnwrap(),
+      clientSecret: ref(secretName).unsafeUnwrap(),
+      scopes: ["openid", "email", "profile"],
+      attributeRequestMethod: cognito.OidcAttributeRequestMethod.GET,
+      attributeMapping: {
+        email: cognito.ProviderAttribute.other("email"),
+        preferredUsername: cognito.ProviderAttribute.other("preferred_username"),
+      },
+    });
+    return { name: ENTRA_IDP_NAME, resource };
+  }
+  const resource = new cognito.UserPoolIdentityProviderOidc(scope, "IdentityProvider", {
+    userPool,
+    name: auth.oidc.name,
+    issuerUrl: auth.oidc.issuer,
+    clientId: ref(idName).unsafeUnwrap(),
+    // 動的参照の文字列（`{{resolve:secretsmanager:...}}`）。値そのものではない
+    clientSecret: ref(secretName).unsafeUnwrap(),
+    scopes: auth.oidc.scopes,
+    attributeRequestMethod: cognito.OidcAttributeRequestMethod.GET,
+    attributeMapping: {
+      email: cognito.ProviderAttribute.other("email"),
+      emailVerified: cognito.ProviderAttribute.other("email_verified"),
+    },
+  });
+  return { name: auth.oidc.name, resource };
 }
 
 export class StageStack extends Stack {
@@ -102,6 +190,11 @@ export class StageStack extends Stack {
         selfSignUpEnabled: false,
         signInAliases: { email: true },
         standardAttributes: { email: { required: true, mutable: true } },
+        // google のときだけ Workspace の hd を入れるカスタム属性を持つ。カスタム属性は追加はできるが変更・削除できない。
+        // スキーマへの追加は更新（置換なし）で反映される（DECISIONS.md）。allow の有無に関わらず付けて、後から変えない
+        ...(props.ir.http.auth.enabled && props.ir.http.auth.provider === "google"
+          ? { customAttributes: { hd: new cognito.StringAttribute({ mutable: true }) } }
+          : {}),
         accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
         removalPolicy: removalOf("retain"),
       });
@@ -114,7 +207,8 @@ export class StageStack extends Stack {
         generateSecretString: { passwordLength: 64, excludePunctuation: true },
         removalPolicy: removalOf("retain"),
       });
-      this.auth = { userPool, domainPrefix: prefix, sessionSecret };
+      const identityProvider = addIdentityProvider(this, userPool, props);
+      this.auth = { userPool, domainPrefix: prefix, sessionSecret, identityProvider };
       new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     }
   }
@@ -241,11 +335,28 @@ export class VersionStack extends Stack {
       } else {
         const sa = props.stage?.auth;
         if (!sa) throw new Error("internal: stage auth missing");
+        const google = auth.provider === "google";
         const client = new cognito.UserPoolClient(this, "Client", {
           userPool: sa.userPool,
+          // カスタム属性は既定では読めない／書けない。マッピングする属性は書き込み可能でなければならない
+          // （email_verified はクライアントの書き込み属性に指定できない）
+          ...(google
+            ? {
+                readAttributes: new cognito.ClientAttributes()
+                  .withStandardAttributes({ email: true, emailVerified: true })
+                  .withCustomAttributes("hd"),
+                writeAttributes: new cognito.ClientAttributes()
+                  .withStandardAttributes({ email: true })
+                  .withCustomAttributes("hd"),
+              }
+            : {}),
           generateSecret: false,
           preventUserExistenceErrors: true,
-          supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
+          supportedIdentityProviders: [
+            sa.identityProvider
+              ? cognito.UserPoolClientIdentityProvider.custom(sa.identityProvider.name)
+              : cognito.UserPoolClientIdentityProvider.COGNITO,
+          ],
           oAuth: {
             flows: { authorizationCodeGrant: true },
             scopes: [
@@ -266,6 +377,17 @@ export class VersionStack extends Stack {
         frontEnv.FLAREON_COGNITO_DOMAIN = `https://${sa.domainPrefix}.auth.${this.region}.amazoncognito.com`;
         frontEnv.FLAREON_COGNITO_CLIENT_ID = client.userPoolClientId;
         frontEnv.FLAREON_COGNITO_USER_POOL_ID = sa.userPool.userPoolId;
+        frontEnv.FLAREON_AUTH_PROVIDER = auth.provider;
+        if (auth.allow?.domains.length) {
+          frontEnv.FLAREON_AUTH_ALLOW_DOMAINS = auth.allow.domains.join(",");
+        }
+        if (auth.allow?.emails.length)
+          frontEnv.FLAREON_AUTH_ALLOW_EMAILS = auth.allow.emails.join(",");
+        if (sa.identityProvider) {
+          // IdP が先に存在しないと client の作成が失敗する（stage → version のスタック依存で保証）
+          client.node.addDependency(sa.identityProvider.resource);
+          frontEnv.FLAREON_COGNITO_IDENTITY_PROVIDER = sa.identityProvider.name;
+        }
       }
 
       const frontLogs = functionLogGroup(this, "FrontLogs");
@@ -317,6 +439,8 @@ export interface BuildOptions {
   skipBundling?: boolean;
   /** デプロイ元の Git ブランチ（version スタックの `flareon:branch` タグ。env list の表示用）。 */
   source?: string;
+  /** 外部 IdP の資格情報シークレットのバージョン ID（deploy 時に AWS から取得）。 */
+  idpSecretVersions?: Record<string, string>;
   /** アセットの注入（unit テスト用）。 */
   code?: { app?: lambda.Code; front?: lambda.Code };
 }
@@ -353,6 +477,7 @@ export function buildApp(o: BuildOptions): BuiltApp {
       ir,
       deployment,
       account: o.account,
+      idpSecretVersions: o.idpSecretVersions,
     });
   }
 

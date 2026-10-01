@@ -13,6 +13,7 @@ import {
   type GitRef,
 } from "../resolver/index.js";
 import type { FlareonIR } from "../ir/index.js";
+import { idpSecretState, needsIdpSecrets } from "./idp.js";
 import { loadIR } from "./load.js";
 import type { Io } from "./validate.js";
 
@@ -25,6 +26,10 @@ export interface SynthArgs {
   defaultBranch?: string;
   region?: string;
   account?: string;
+  /** 外部 IdP の資格情報のバージョン ID（deploy / plan が AWS から取得して渡す）。 */
+  idpSecretVersions?: Record<string, string>;
+  /** GitHub Actions 向け（イベントに応じた実行可否の判定）。deploy / destroy で使う。 */
+  ci?: boolean;
 }
 
 export interface SynthDeps {
@@ -148,6 +153,7 @@ export async function synthAll(
       appDir,
       skipBundling,
       ...(t.source !== undefined ? { source: t.source } : {}),
+      ...(args.idpSecretVersions ? { idpSecretVersions: args.idpSecretVersions } : {}),
     });
   } catch (e) {
     io.stderr(`Error: synthesis failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -206,7 +212,28 @@ export async function runPlan(
       );
     }
   }
-  const s = await synthAll({ ...args, ...(account ? { account } : {}) }, deps, t);
+  let idpSecretVersions: Record<string, string> | undefined;
+  if (cloud && needsIdpSecrets(t.ir, t.deployment)) {
+    try {
+      const st = await idpSecretState(cloud, t.ir, t.deployment);
+      if (st.missing.length) {
+        deps.io.stderr(
+          `Warning: ${st.missing.join(", ")} not set for ${t.deployment.stage}; deploy will fail until set (flareon secret set <name> --stage ${t.deployment.stage})`,
+        );
+      } else idpSecretVersions = st.versions;
+    } catch (e) {
+      deps.io.stderr(`Warning: cannot read the sign-in credentials (${errorMessage(e)})`);
+    }
+  }
+  const s = await synthAll(
+    {
+      ...args,
+      ...(account ? { account } : {}),
+      ...(idpSecretVersions ? { idpSecretVersions } : {}),
+    },
+    deps,
+    t,
+  );
   if (!s) return 1;
 
   let state: PlanState | undefined;

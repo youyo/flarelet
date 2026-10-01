@@ -1,3 +1,4 @@
+import { policyFingerprint } from "./allow.js";
 import { cognitoCallback, cognitoLogin, cognitoLogout } from "./cognito.js";
 import { parseAuthConfig } from "./config.js";
 import { previewFormPage, previewLogin, previewLogout, PREVIEW_PATH } from "./preview.js";
@@ -32,6 +33,10 @@ export function createHandler(
 ): (event: ApiEvent) => Promise<ApiResult> {
   const config = parseAuthConfig(env);
   const deps = cached(rawDeps);
+  const policy =
+    config.mode === "cognito"
+      ? policyFingerprint(config.cognito.provider, config.cognito.allow)
+      : undefined;
 
   return async (event) => {
     const sessionKey = await deps.getSecret(config.sessionSecretArn);
@@ -50,7 +55,7 @@ export function createHandler(
       return json(404, { error: "not_found" });
     }
 
-    const identity = readSession(event, sessionKey, config.mode, deps.now());
+    const identity = readSession(event, sessionKey, config.mode, deps.now(), policy);
     if (!identity) {
       if (config.mode === "preview") {
         return isBrowserNavigation(event) ? previewFormPage() : unauthorized();

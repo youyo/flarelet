@@ -1,5 +1,6 @@
 import type { Cloud } from "../aws/cloud.js";
-import { secretsPath } from "../constructs/names.js";
+import { idpSecretName, secretsPath } from "../constructs/names.js";
+import { idpNamesOf } from "./idp.js";
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { resolveTarget, type SynthArgs, type Target } from "./synth.js";
 
@@ -43,7 +44,8 @@ function checkDeclared(t: Target, name: string, deps: OpsDeps): boolean {
 export async function runSecretSet(args: SecretArgs, deps: OpsDeps): Promise<number> {
   const t = await resolveTarget(args, deps);
   if (!t) return 1;
-  if (!checkDeclared(t, args.name, deps)) return 1;
+  const idp = idpNamesOf(t.ir).includes(args.name);
+  if (!idp && !checkDeclared(t, args.name, deps)) return 1;
   const { io } = deps;
   let value: string;
   try {
@@ -58,6 +60,13 @@ export async function runSecretSet(args: SecretArgs, deps: OpsDeps): Promise<num
   }
   try {
     const cloud = deps.cloud(t.region);
+    if (idp) {
+      // 外部 IdP の資格情報: Secrets Manager に置き、次の deploy で Cognito に反映する（アプリには渡さない）
+      await cloud.putSecret(idpSecretName(t.ir.name, t.deployment.stage, args.name), value);
+      io.stdout(`Set ${args.name} for ${t.ir.name} (${t.deployment.stage}) sign-in`);
+      io.stdout(`Apply it with: flareon deploy --stage ${t.deployment.stage}`);
+      return 0;
+    }
     await cloud.putParameter(`${secretsPath(t.ir.name, t.deployment.stage)}${args.name}`, value);
     io.stdout(`Set ${args.name} for ${t.ir.name} (${t.deployment.stage})`);
     await restartStage(cloud, t, deps);
@@ -73,14 +82,21 @@ export async function runSecretList(args: SynthArgs, deps: OpsDeps): Promise<num
   if (!t) return 1;
   const path = secretsPath(t.ir.name, t.deployment.stage);
   let params;
+  const idpNames = idpNamesOf(t.ir);
+  const idp = new Map<string, Date | undefined | null>();
   try {
-    params = await deps.cloud(t.region).listParameters(path);
+    const cloud = deps.cloud(t.region);
+    params = await cloud.listParameters(path);
+    for (const n of idpNames) {
+      const info = await cloud.describeSecret(idpSecretName(t.ir.name, t.deployment.stage, n));
+      idp.set(n, info ? info.lastChanged : null);
+    }
   } catch (e) {
     deps.io.stderr(`Error: ${errorMessage(e)}`);
     return 1;
   }
   const stored = new Map(params.map((p) => [p.name.slice(path.length), p]));
-  const names = [...new Set([...t.ir.secrets, ...stored.keys()])];
+  const names = [...new Set([...t.ir.secrets, ...stored.keys(), ...idpNames])];
   if (!names.length) {
     deps.io.stdout(`No secrets for ${t.ir.name} (${t.deployment.stage})`);
     return 0;
@@ -89,6 +105,13 @@ export async function runSecretList(args: SynthArgs, deps: OpsDeps): Promise<num
   deps.io.stdout(`Secrets for ${t.ir.name} (${t.deployment.stage})`);
   deps.io.stdout("");
   for (const n of names) {
+    if (idp.has(n)) {
+      const changed = idp.get(n);
+      const state =
+        changed === null ? "not set" : `set${changed ? `      ${changed.toISOString()}` : ""}`;
+      deps.io.stdout(`  ${n.padEnd(width)}  ${state}  (sign-in credential)`);
+      continue;
+    }
     const p = stored.get(n);
     const state = p
       ? `set${p.lastModified ? `      ${p.lastModified.toISOString()}` : ""}`
@@ -104,6 +127,14 @@ export async function runSecretDelete(args: SecretArgs, deps: OpsDeps): Promise<
   if (!t) return 1;
   try {
     const cloud = deps.cloud(t.region);
+    if (idpNamesOf(t.ir).includes(args.name)) {
+      if (!(await cloud.deleteSecret(idpSecretName(t.ir.name, t.deployment.stage, args.name)))) {
+        deps.io.stderr(`Error: secret ${args.name} is not set for ${t.deployment.stage}`);
+        return 1;
+      }
+      deps.io.stdout(`Deleted ${args.name} from ${t.ir.name} (${t.deployment.stage})`);
+      return 0;
+    }
     const ok = await cloud.deleteParameter(
       `${secretsPath(t.ir.name, t.deployment.stage)}${args.name}`,
     );

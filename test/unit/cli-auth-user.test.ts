@@ -54,4 +54,24 @@ describe("auth user", () => {
     expect(await runUserList({ file: h.file, stage: "prod" }, h.deps)).toBe(1);
     expect(h.err.join("\n")).toContain("not deployed");
   });
+
+  it("warns that invited users cannot sign in when the stage uses an external IdP", async () => {
+    h = await harness(`version: 1
+name: myapp
+runtime: { language: python }
+http: { auth: { provider: google } }
+`);
+    h.cloud.addStack({ name: "flareon-myapp-prod", outputs: { UserPoolId: "pool-1" } });
+    expect(await runUserAdd({ file: h.file, stage: "prod", email: "a@example.com" }, h.deps)).toBe(
+      0,
+    );
+    expect(h.cloud.calls).toContain("createUser:pool-1:a@example.com");
+    expect(h.err.join("\n")).toMatch(/Warning:.*google.*cannot (be used to )?sign in/i);
+  });
+
+  it("does not warn for the built-in Cognito sign-in", async () => {
+    await withPool();
+    await runUserAdd({ file: h.file, stage: "prod", email: "a@example.com" }, h.deps);
+    expect(h.err.join("\n")).not.toMatch(/Warning/);
+  });
 });

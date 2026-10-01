@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProgressEvent } from "../aws/iohost.js";
+import { ciPreflight } from "./ci.js";
+import { idpRedirectUri, idpSecretState, missingIdpMessage, needsIdpSecrets } from "./idp.js";
 import { errorMessage, formatDuration, type OpsDeps } from "./ops.js";
 import { resolveTarget, synthAll, type SynthArgs, type Synthesized } from "./synth.js";
 
@@ -31,6 +33,7 @@ export function progressPrinter(
     const kind = kinds.get(stack);
     if (kind === "stage") return `stage resources (${s.deployment.stage})`;
     if (kind === "preview") return `preview ${s.deployment.version}`;
+    if (kind === "dev") return `dev resources (${s.deployment.stage}/${s.deployment.version})`;
     return `version ${s.deployment.version}`;
   };
   return (e) => {
@@ -68,6 +71,10 @@ export function progressPrinter(
 
 export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number> {
   const { io } = deps;
+  if (args.ci) {
+    const code = await ciPreflight("deploy", deps);
+    if (code !== undefined) return code;
+  }
   const t = await resolveTarget(args, deps);
   if (!t) return 1;
   const cloud = deps.cloud(t.region);
@@ -79,8 +86,28 @@ export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number>
     return 1;
   }
 
+  let idpSecretVersions: Record<string, string> | undefined;
+  if (needsIdpSecrets(t.ir, t.deployment)) {
+    try {
+      const st = await idpSecretState(cloud, t.ir, t.deployment);
+      if (st.missing.length) {
+        const uri = idpRedirectUri(t.ir, t.deployment, t.region, account);
+        for (const l of missingIdpMessage(t.ir, t.deployment, st.missing, uri)) io.stderr(l);
+        return 1;
+      }
+      idpSecretVersions = st.versions;
+    } catch (e) {
+      io.stderr(`Error: cannot read the sign-in credentials: ${errorMessage(e)}`);
+      return 1;
+    }
+  }
+
   const t0 = deps.now();
-  const s = await synthAll({ ...args, account }, deps, t);
+  const s = await synthAll(
+    { ...args, account, ...(idpSecretVersions ? { idpSecretVersions } : {}) },
+    deps,
+    t,
+  );
   if (!s) return 1;
   const { deployment: d } = s;
   io.stdout(`Deploying ${s.appName} (${d.stage}/${d.version}) to ${account}/${s.region}`);
@@ -116,6 +143,8 @@ export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number>
       io.stdout(
         `  Open it with: flareon env url --pr ${d.version.replace(/^pr-/, "")} --with-token`,
       );
+    } else if (auth.provider !== "cognito") {
+      io.stdout(`  Auth  sign-in with ${auth.provider}`);
     } else {
       io.stdout("  Auth  sign-in required");
       io.stdout("");

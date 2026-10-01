@@ -24,3 +24,14 @@ export const isValidStage = (s: string): boolean => s.length <= STAGE_MAX && NAM
 
 export const isValidVersion = (s: string): boolean =>
   s.length <= VERSION_MAX && VERSION_PATTERN.test(s);
+
+/**
+ * 外部 IdP の資格情報（client id / secret）の名前。`flareon secret set <名前>` で設定する。
+ * CloudFormation の ssm-secure 動的参照は Cognito IdP に使えないため、Secrets Manager に保存する（DECISIONS.md）。
+ */
+export function idpSecretNames(provider: string): string[] {
+  if (provider === "google") return ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
+  if (provider === "oidc") return ["OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"];
+  if (provider === "entra") return ["ENTRA_CLIENT_ID", "ENTRA_CLIENT_SECRET"];
+  return [];
+}

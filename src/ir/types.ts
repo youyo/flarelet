@@ -1,9 +1,38 @@
-import type { AUTH_PROVIDERS } from "../config/index.js";
+import type { SUPPORTED_AUTH_PROVIDERS } from "../config/index.js";
 
 export type RuntimeLanguage = "python" | "typescript";
-export type AuthProvider = "cognito" | (typeof AUTH_PROVIDERS)[number];
+export type AuthProvider = "cognito" | (typeof SUPPORTED_AUTH_PROVIDERS)[number];
 
-export type AuthIR = { enabled: false } | { enabled: true; provider: AuthProvider };
+export interface OidcIR {
+  issuer: string;
+  scopes: string[];
+  /** Cognito の IdP 名（Managed Login のボタン表示）。 */
+  name: string;
+}
+
+export interface EntraIR {
+  /** ディレクトリ（テナント）ID（小文字の GUID）。 */
+  tenant: string;
+}
+
+/** http.auth.allow（小文字に正規化済み）。 */
+export interface AllowIR {
+  domains: string[];
+  emails: string[];
+}
+
+interface AuthOn {
+  enabled: true;
+  /** 未指定なら IdP で認証できた人は誰でも可。 */
+  allow?: AllowIR;
+}
+
+export type AuthIR =
+  | { enabled: false }
+  | (AuthOn & { provider: "cognito" })
+  | (AuthOn & { provider: "google" })
+  | (AuthOn & { provider: "oidc"; oidc: OidcIR })
+  | (AuthOn & { provider: "entra"; entra: EntraIR });
 
 export interface HttpIR {
   auth: AuthIR;

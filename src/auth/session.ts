@@ -60,6 +60,7 @@ export function issueSessionCookie(
     exp: Math.floor(nowMs / 1000) + SESSION_TTL_SECONDS,
   };
   if (identity.email !== undefined) payload["email"] = identity.email;
+  if (identity.policy !== undefined) payload["ap"] = identity.policy;
   return serializeCookie(SESSION_COOKIE, signPayload(payload, key), {
     maxAge: SESSION_TTL_SECONDS,
   });
@@ -91,12 +92,15 @@ export function readSession(
   key: string,
   mode: AuthMode,
   nowMs: number,
+  policy?: string,
 ): Identity | undefined {
   const raw = parseCookies(event)[SESSION_COOKIE];
   if (!raw) return undefined;
   const p = verifyPayload(raw, key, nowMs);
   if (!p || p["t"] !== "session" || p["mode"] !== mode || typeof p["sub"] !== "string")
     return undefined;
+  // allow ポリシーがある場合、同じポリシーで発行したセッションだけを受け付ける
+  if (policy !== undefined && p["ap"] !== policy) return undefined;
   const identity: Identity = { sub: p["sub"] };
   if (typeof p["email"] === "string") identity.email = p["email"];
   return identity;

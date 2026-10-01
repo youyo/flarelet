@@ -4,9 +4,14 @@ import { Command, InvalidArgumentError } from "commander";
 import { awsCloud } from "../aws/real.js";
 import { toolkitDeployer } from "../aws/toolkit.js";
 import { runUserAdd, runUserList, runUserRemove } from "./auth-user.js";
+import { synthGithubBootstrap } from "../bootstrap/github.js";
+import { gitExec, detectGit } from "../git/index.js";
+import { runBootstrapGithub } from "./bootstrap.js";
 import { runDeploy } from "./deploy.js";
 import { runDestroy } from "./destroy.js";
+import { registerDevCommand } from "./dev-command.js";
 import { runEnvList, runEnvUrl } from "./env.js";
+import { defaultGithub, runGithubComment, type CommentState } from "./github.js";
 import { runInit } from "./init.js";
 import { readSecretInput } from "./input.js";
 import { runLogs } from "./logs.js";
@@ -47,7 +52,20 @@ export function createProgram(): Command {
     .description("Create flareon.yaml and a starter app")
     .option("--runtime <runtime>", "python or typescript", "python")
     .action(async (dir: string | undefined, opts: { runtime: string }) => {
-      process.exitCode = await runInit({ dir: dir ?? ".", runtime: opts.runtime }, io);
+      const target = dir ?? ".";
+      const exec = gitExec(resolve(target));
+      // origin/HEAD が無い新規リポジトリは、現在のブランチ（まだコミットが無くても）を既定ブランチとみなす
+      const defaultBranch =
+        (await detectGit({ exec })).defaultBranch ??
+        (await exec(["symbolic-ref", "--short", "HEAD"]));
+      process.exitCode = await runInit(
+        {
+          dir: target,
+          runtime: opts.runtime,
+          ...(defaultBranch ? { defaultBranch } : {}),
+        },
+        io,
+      );
     });
 
   const targetOptions = (cmd: Command): Command =>
@@ -81,6 +99,7 @@ export function createProgram(): Command {
       if (typeof o[k] === "string") a[k] = o[k];
     }
     if (typeof o.pr === "number") a.pr = o.pr;
+    if (o.ci === true) a.ci = true;
     return a;
   };
 
@@ -99,7 +118,10 @@ export function createProgram(): Command {
   });
 
   targetOptions(
-    program.command("deploy").description("Deploy the app to AWS and print its URL"),
+    program
+      .command("deploy")
+      .description("Deploy the app to AWS and print its URL")
+      .option("--ci", "GitHub Actions mode: derive the target from the event (skips closed PRs)"),
   ).action(async (o: Record<string, unknown>) => {
     const a = toArgs(o);
     process.exitCode = await runDeploy(a, opsDeps(a));
@@ -113,7 +135,8 @@ export function createProgram(): Command {
         "--stage-resources",
         "also permanently delete the stage's database, storage, users and secrets",
       )
-      .option("-y, --yes", "confirm --stage-resources"),
+      .option("-y, --yes", "confirm --stage-resources")
+      .option("--ci", "GitHub Actions mode: only for a closed pull request"),
   ).action(async (o: Record<string, unknown>) => {
     const a = toArgs(o);
     process.exitCode = await runDestroy(
@@ -216,6 +239,62 @@ export function createProgram(): Command {
       process.exitCode = await runUserRemove({ ...a, email }, opsDeps(a));
     },
   );
+
+  const github = program
+    .command("github")
+    .description("GitHub integration (for GitHub Actions)")
+    .enablePositionalOptions();
+  targetOptions(
+    github
+      .command("comment")
+      .description("Create or update the PR comment and GitHub Deployment for a preview")
+      .option("--state <state>", "success, failure or inactive", "success")
+      .option(
+        "--with-token",
+        "include the preview magic link (contains the token; private repositories only)",
+      ),
+  ).action(async (o: Record<string, unknown>) => {
+    const state = String(o.state);
+    if (!["success", "failure", "inactive"].includes(state)) {
+      console.error("Error: --state must be success, failure or inactive");
+      process.exitCode = 1;
+      return;
+    }
+    const a = toArgs(o);
+    process.exitCode = await runGithubComment(
+      { ...a, state: state as CommentState, withToken: o.withToken === true },
+      { ...opsDeps(a), github: defaultGithub },
+    );
+  });
+
+  const bootstrap = program
+    .command("bootstrap")
+    .description("Prepare the AWS account")
+    .enablePositionalOptions();
+  bootstrap
+    .command("github")
+    .description("Create the IAM role GitHub Actions of a repository assumes via OIDC")
+    .requiredOption("--repo <owner/name>", "GitHub repository")
+    .option("--destroy", "remove the role (and the OIDC provider if Flareon created it)")
+    .option("--qualifier <qualifier>", "CDK bootstrap qualifier", "hnb659fds")
+    .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
+    .action(async (o: Record<string, unknown>) => {
+      const a = {
+        file: resolve("flareon.yaml"),
+        ...(typeof o.region === "string" ? { region: o.region } : {}),
+      };
+      process.exitCode = await runBootstrapGithub(
+        {
+          repo: String(o.repo),
+          destroy: o.destroy === true,
+          qualifier: String(o.qualifier),
+          ...(typeof o.region === "string" ? { region: o.region } : {}),
+        },
+        { ...opsDeps(a), synthBootstrap: synthGithubBootstrap },
+      );
+    });
+
+  registerDevCommand(program, opsDeps);
 
   return program;
 }

@@ -1,8 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
+import { isAllowed, policyFingerprint } from "./allow.js";
 import type { CognitoConfig } from "./config.js";
-import { json, redirect } from "./responses.js";
+import { escapeHtml, html, json, redirect } from "./responses.js";
 import {
   clearSessionCookie,
   issueSessionCookie,
@@ -78,6 +79,9 @@ export function cognitoLogin(event: ApiEvent, ctx: CognitoContext): ApiResult {
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
+  if (ctx.config.cognito.identityProvider) {
+    q.set("identity_provider", ctx.config.cognito.identityProvider);
+  }
   return redirect(`${ctx.config.cognito.domain}/oauth2/authorize?${q}`, [
     serializeCookie(FLOW_COOKIE, flow, { maxAge: FLOW_TTL_SECONDS, path: FLOW_COOKIE_PATH }),
   ]);
@@ -105,7 +109,7 @@ export async function verifyIdToken(
   idToken: string,
   nonce: string,
   ctx: CognitoContext,
-): Promise<{ sub: string; email?: string }> {
+): Promise<{ sub: string; email?: string; claims: Record<string, unknown> }> {
   const { userPoolId, clientId } = ctx.config.cognito;
   const region = userPoolId.split("_")[0] ?? "";
   const getKey = ctx.deps.getVerificationKey ?? defaultKeyGetter(region, userPoolId);
@@ -121,7 +125,9 @@ export async function verifyIdToken(
   }
   if (typeof payload.sub !== "string") throw new Error("missing sub");
   const email = payload["email"];
-  return typeof email === "string" ? { sub: payload.sub, email } : { sub: payload.sub };
+  return typeof email === "string"
+    ? { sub: payload.sub, email, claims: payload }
+    : { sub: payload.sub, claims: payload };
 }
 
 export async function cognitoCallback(event: ApiEvent, ctx: CognitoContext): Promise<ApiResult> {
@@ -168,10 +174,41 @@ export async function cognitoCallback(event: ApiEvent, ctx: CognitoContext): Pro
   } catch {
     return bad(401, "invalid_id_token");
   }
+  const { provider, allow } = ctx.config.cognito;
+  if (!isAllowed(identity.claims, provider, allow)) {
+    return accessDenied(
+      identity.email ?? (identity.claims["preferred_username"] as string | undefined),
+    );
+  }
+  const policy = policyFingerprint(provider, allow);
+  const session = {
+    sub: identity.sub,
+    ...(identity.email !== undefined ? { email: identity.email } : {}),
+    ...(policy !== undefined ? { policy } : {}),
+  };
   return redirect(sanitizeReturnTo(typeof returnTo === "string" ? returnTo : "/"), [
-    issueSessionCookie(identity, "cognito", ctx.sessionKey, ctx.deps.now()),
+    issueSessionCookie(session, "cognito", ctx.sessionKey, ctx.deps.now()),
     clearFlowCookie(),
   ]);
+}
+
+/** allow ポリシー外のユーザー。セッションは発行せず、別アカウントで入り直せるようログアウトへの導線を出す。 */
+function accessDenied(who: string | undefined): ApiResult {
+  const account = who ? `<strong>${escapeHtml(who)}</strong>` : "this account";
+  return html(
+    403,
+    `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access denied</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5;color:#222}a{color:#0b5fff}</style>
+</head><body>
+<h1>Access denied</h1>
+<p>You signed in as ${account}, but this app only allows specific accounts or organizations.</p>
+<p>Ask the app owner for access, or <a href="/__flareon/auth/logout">sign out</a> and sign in with a different account.</p>
+</body></html>
+`,
+    [clearFlowCookie()],
+  );
 }
 
 export function cognitoLogout(event: ApiEvent, ctx: CognitoContext): ApiResult {

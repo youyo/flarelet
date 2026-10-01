@@ -1,5 +1,8 @@
 import type { Cloud } from "../aws/cloud.js";
-import { secretsPath, stackNames } from "../constructs/names.js";
+import { SUPPORTED_AUTH_PROVIDERS } from "../config/index.js";
+import { idpSecretNames } from "../config/names.js";
+import { idpSecretName, secretsPath, stackNames } from "../constructs/names.js";
+import { ciPreflight } from "./ci.js";
 import { errorMessage, formatDuration, type OpsDeps } from "./ops.js";
 import { resolveTarget, type SynthArgs } from "./synth.js";
 
@@ -37,6 +40,10 @@ async function deleteStack(
 
 export async function runDestroy(args: DestroyArgs, deps: OpsDeps): Promise<number> {
   const { io } = deps;
+  if (args.ci) {
+    const code = await ciPreflight("destroy", deps);
+    if (code !== undefined) return code;
+  }
   const t = await resolveTarget(args, deps);
   if (!t) return 1;
   const { ir, deployment: d } = t;
@@ -95,6 +102,15 @@ export async function runDestroy(args: DestroyArgs, deps: OpsDeps): Promise<numb
     const params = await cloud.listParameters(secretsPath(ir.name, d.stage));
     for (const p of params) await cloud.deleteParameter(p.name);
     if (params.length) io.stdout(`    removed ${params.length} secret(s)`);
+
+    // 外部 IdP の資格情報（Secrets Manager、スタック外）。provider を変えた後でも残さないよう全種を対象にする
+    let idp = 0;
+    for (const p of SUPPORTED_AUTH_PROVIDERS) {
+      for (const n of idpSecretNames(p)) {
+        if (await cloud.deleteSecret(idpSecretName(ir.name, d.stage, n))) idp++;
+      }
+    }
+    if (idp) io.stdout(`    removed ${idp} sign-in credential(s)`);
     return 0;
   } catch (e) {
     io.stderr(`Error: destroy failed: ${errorMessage(e)}`);

@@ -21,6 +21,7 @@ import {
   REGION,
   removeDir,
   stackOutputs,
+  stackRoleArn,
   track,
   uniqueName,
   urlFrom,
@@ -32,6 +33,8 @@ describe.runIf(ENABLED)("real AWS: python app with auth and bindings", () => {
   const app = uniqueName("py");
   const tracked = newTracked();
   const email = `e2e-${randomBytes(3).toString("hex")}@example.com`;
+  // http.auth.allow に含まれないユーザー（Cognito にはいるがアプリには入れない）
+  const outsider = `e2e-out-${randomBytes(3).toString("hex")}@example.com`;
   const password = `Fl-${randomBytes(12).toString("base64url")}9a!`;
   const secretValue = randomBytes(16).toString("hex");
   const target = ["--default-branch", "main"];
@@ -46,7 +49,9 @@ describe.runIf(ENABLED)("real AWS: python app with auth and bindings", () => {
       `version: 1
 name: ${app}
 runtime: { language: python, version: "3.13" }
-http: true
+http:
+  auth:
+    allow: { emails: [${email}] }
 database: { main: {} }
 storage: { files: {} }
 ai: { models: [haiku] }
@@ -126,6 +131,12 @@ git:
       expect(r.stdout).not.toMatch(/AWS::|_IN_PROGRESS/);
       urls.v1 = urlFrom(r.stdout);
       await track(app, tracked);
+      // CDK は cfn-exec ロールでスタックを作る。destroy はこのロールで削除する（CI ロールは削除対象への直接権限を持たない）
+      for (const s of [`flareon-${app}-prod`, `flareon-${app}-prod-v1`]) {
+        expect(await stackRoleArn(s)).toMatch(
+          /:role\/cdk-[a-z0-9]+-cfn-exec-role-\d{12}-ap-northeast-1$/,
+        );
+      }
     },
     LONG,
   );
@@ -186,6 +197,68 @@ git:
       const index = await call(urls.v1!, "get", "/");
       expect(index.status).toBe(200);
       expect(JSON.parse(index.body)).toMatchObject({ app: "python", user: email });
+    },
+    LONG,
+  );
+
+  it(
+    "allow: a user outside http.auth.allow is refused with 403 and gets no session",
+    async () => {
+      const pool = (await stackOutputs(`flareon-${app}-prod`))?.UserPoolId;
+      const idp = new CognitoIdentityProviderClient({ region: REGION });
+      await idp.send(
+        new AdminCreateUserCommand({
+          UserPoolId: pool,
+          Username: outsider,
+          UserAttributes: [
+            { Name: "email", Value: outsider },
+            { Name: "email_verified", Value: "true" },
+          ],
+          MessageAction: "SUPPRESS",
+        }),
+      );
+      await idp.send(
+        new AdminSetUserPasswordCommand({
+          UserPoolId: pool,
+          Username: outsider,
+          Password: password,
+          Permanent: true,
+        }),
+      );
+      // 許可ユーザーの Cognito / Flareon セッションを持たない別のブラウザコンテキスト
+      const other = await browser!.newContext();
+      const page = await other.newPage();
+      try {
+        const url = urls.v1!;
+        await page.goto(`${url}/whoami`);
+        await page.locator('input[name="username"]').fill(outsider);
+        await page.locator('input[name="password"]').fill(password);
+        const callback = page.waitForResponse(
+          (r) => r.url().startsWith(`${url}/__flareon/auth/callback`),
+          {
+            timeout: 60_000,
+          },
+        );
+        await page.getByRole("button", { name: "Sign in" }).click();
+        const res = await callback;
+        expect(res.status()).toBe(403);
+        await page.waitForLoadState();
+        expect(await page.textContent("h1")).toBe("Access denied");
+        expect(await page.textContent("body")).toContain(outsider);
+        expect(await page.locator('a[href="/__flareon/auth/logout"]').count()).toBe(1);
+        const cookies = await other.cookies(url);
+        expect(cookies.map((c) => c.name)).not.toContain("__flareon_session");
+        // セッションが無いので API は 401 のまま
+        const api = await other.request.get(`${url}/whoami`, {
+          headers: { accept: "application/json" },
+        });
+        expect(api.status()).toBe(401);
+      } catch (e) {
+        await page.screenshot({ path: join(SCREENSHOTS, `${app}-outsider.png`) }).catch(() => {});
+        throw e;
+      } finally {
+        await other.close();
+      }
     },
     LONG,
   );

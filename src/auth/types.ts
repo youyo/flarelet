@@ -32,6 +32,8 @@ export interface ApiResult {
 export interface Identity {
   sub: string;
   email?: string;
+  /** 発行時の allow ポリシー（policyFingerprint）。ポリシーが無ければ undefined。 */
+  policy?: string;
 }
 
 export type AuthMode = "cognito" | "preview";

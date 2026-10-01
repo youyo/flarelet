@@ -4,11 +4,14 @@ import { basename, dirname, join, resolve } from "node:path";
 import { APP_NAME_MIN, NAME_MAX } from "../config/index.js";
 import type { RuntimeLanguage } from "../ir/index.js";
 import { scaffold } from "./templates.js";
+import { WORKFLOW_PATH, workflowTemplate } from "./workflow.js";
 import type { Io } from "./validate.js";
 
 export interface InitArgs {
   dir: string;
   runtime?: string;
+  /** push で deploy するブランチ（既定: main）。 */
+  defaultBranch?: string;
 }
 
 /** ディレクトリ名から有効なアプリ名（小文字英数字とハイフン、英字始まり）を導く。 */
@@ -51,12 +54,31 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
     await appendFile(gi, `${prefix}.flareon/\n`);
   }
 
+  const wfTarget = join(dir, WORKFLOW_PATH);
+  const wfExists = existsSync(wfTarget);
+  if (!wfExists) {
+    await mkdir(dirname(wfTarget), { recursive: true });
+    await writeFile(
+      wfTarget,
+      workflowTemplate({
+        runtime: runtime as RuntimeLanguage,
+        branches: [args.defaultBranch ?? "main"],
+      }),
+    );
+  }
+
   io.stdout(`Created ${name} (${runtime}) in ${dir}`);
   for (const f of files) io.stdout(`  ${f.path}`);
+  io.stdout(wfExists ? `  ${WORKFLOW_PATH} already exists (left untouched)` : `  ${WORKFLOW_PATH}`);
   io.stdout("");
   io.stdout("Next steps:");
   if (runtime === "typescript") io.stdout("  (cd app && npm install)");
   io.stdout("  flareon validate");
   io.stdout("  flareon synth --stage prod --version v1");
+  io.stdout("");
+  io.stdout("GitHub Actions (PR previews and deploys):");
+  io.stdout("  flareon bootstrap github --repo <owner>/<name>");
+  io.stdout("  gh variable set FLAREON_AWS_ROLE_ARN --body <role arn printed above>");
+  io.stdout("  gh variable set FLAREON_AWS_REGION --body <region>");
   return 0;
 }

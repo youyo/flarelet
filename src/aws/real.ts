@@ -7,7 +7,11 @@ import {
   ListStackResourcesCommand,
   type Stack,
 } from "@aws-sdk/client-cloudformation";
-import { CloudWatchLogsClient, FilterLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
+import {
+  CloudWatchLogsClient,
+  FilterLogEventsCommand,
+  StartLiveTailCommand,
+} from "@aws-sdk/client-cloudwatch-logs";
 import {
   AdminCreateUserCommand,
   AdminDeleteUserCommand,
@@ -18,6 +22,11 @@ import {
   ListUsersCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { DeleteTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  IAMClient,
+  ListOpenIDConnectProvidersCommand,
+  ListRolesCommand,
+} from "@aws-sdk/client-iam";
 import {
   GetFunctionConfigurationCommand,
   LambdaClient,
@@ -31,8 +40,11 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import {
+  CreateSecretCommand,
   DeleteSecretCommand,
+  DescribeSecretCommand,
   GetSecretValueCommand,
+  PutSecretValueCommand,
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import {
@@ -48,6 +60,13 @@ import type { CfnTemplate } from "./concepts.js";
 const errName = (e: unknown): string => (e instanceof Error ? e.name : "");
 const isMissingStack = (e: unknown): boolean =>
   errName(e) === "ValidationError" && /does not exist/.test((e as Error).message);
+
+/** Live Tail が返すロググループ識別子（`account:name` または ARN）からグループ名を取り出す。 */
+export function groupFromIdentifier(id: string): string {
+  const arn = /:log-group:(.+?)(?::\*)?$/.exec(id)?.[1];
+  if (arn) return arn;
+  return id.replace(/^\d{12}:/, "");
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -74,6 +93,7 @@ export function awsCloud(region: string): Cloud {
   const idp = new CognitoIdentityProviderClient(cfg);
   const ddb = new DynamoDBClient(cfg);
   const s3 = new S3Client(cfg);
+  const iam = new IAMClient(cfg);
 
   async function describeStack(name: string): Promise<StackInfo | undefined> {
     try {
@@ -138,6 +158,43 @@ export function awsCloud(region: string): Cloud {
       return out;
     },
 
+    async listStacksWithTag(key) {
+      const out: StackInfo[] = [];
+      let token: string | undefined;
+      do {
+        const page = await cfn.send(new DescribeStacksCommand({ NextToken: token }));
+        for (const s of page.Stacks ?? []) {
+          if (s.Tags?.some((t) => t.Key === key)) out.push(toInfo(s));
+        }
+        token = page.NextToken;
+      } while (token);
+      return out;
+    },
+
+    async findOidcProvider(url) {
+      const host = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      const list = await iam.send(new ListOpenIDConnectProvidersCommand({}));
+      for (const p of list.OpenIDConnectProviderList ?? []) {
+        if (p.Arn?.endsWith(`:oidc-provider/${host}`)) return p.Arn;
+      }
+      return undefined;
+    },
+
+    async listRolesTrustingProvider(providerArn) {
+      const out: string[] = [];
+      let marker: string | undefined;
+      do {
+        const page = await iam.send(new ListRolesCommand({ Marker: marker }));
+        for (const r of page.Roles ?? []) {
+          // AssumeRolePolicyDocument は URL エンコードされた JSON
+          const doc = decodeURIComponent(r.AssumeRolePolicyDocument ?? "");
+          if (r.RoleName && doc.includes(providerArn)) out.push(r.RoleName);
+        }
+        marker = page.IsTruncated ? page.Marker : undefined;
+      } while (marker);
+      return out;
+    },
+
     async getTemplate(name) {
       try {
         const out = await cfn.send(
@@ -174,7 +231,13 @@ export function awsCloud(region: string): Cloud {
     async deleteStack(name, onStatus) {
       const s = await cfn.send(new DescribeStacksCommand({ StackName: name }));
       const id = s.Stacks?.[0]?.StackId ?? name;
-      await cfn.send(new DeleteStackCommand({ StackName: id }));
+      // CDK が作成時に使った CloudFormation 実行ロール（cdk-<qualifier>-cfn-exec-role-*）で削除する。
+      // CloudFormation はスタックに紐づくロールを省略時にも使うが、CI ロール（削除対象への直接権限なし、
+      // cfn-exec の PassRole のみ）での削除経路を明示して、呼び出し元の資格情報に頼らないようにする。
+      const roleArn = s.Stacks?.[0]?.RoleARN;
+      await cfn.send(
+        new DeleteStackCommand({ StackName: id, ...(roleArn ? { RoleARN: roleArn } : {}) }),
+      );
       const deadline = Date.now() + 60 * 60_000;
       let last = "";
       while (Date.now() < deadline) {
@@ -329,6 +392,28 @@ export function awsCloud(region: string): Cloud {
       }
     },
 
+    async liveTail(groups, onEvent, signal, onStarted) {
+      const account = (await sts.send(new GetCallerIdentityCommand({}))).Account;
+      if (!account) throw new Error("STS returned no account");
+      const arnOf = (g: string) => `arn:aws:logs:${region}:${account}:log-group:${g}`;
+      const out = await logs.send(
+        new StartLiveTailCommand({ logGroupIdentifiers: groups.map(arnOf) }),
+        { abortSignal: signal },
+      );
+      if (!out.responseStream) throw new Error("Live Tail returned no stream");
+      try {
+        for await (const ev of out.responseStream) {
+          if (ev.sessionStart) onStarted();
+          for (const r of ev.sessionUpdate?.sessionResults ?? []) {
+            const group = groupFromIdentifier(r.logGroupIdentifier ?? "");
+            onEvent({ group, timestamp: r.timestamp ?? 0, message: r.message ?? "" });
+          }
+        }
+      } catch (e) {
+        if (!signal.aborted) throw e;
+      }
+    },
+
     async createUser(userPoolId, email) {
       await idp.send(
         new AdminCreateUserCommand({
@@ -371,6 +456,74 @@ export function awsCloud(region: string): Cloud {
         if (errName(e) === "UserNotFoundException") return false;
         throw e;
       }
+    },
+
+    async describeSecret(name) {
+      try {
+        const out = await sm.send(new DescribeSecretCommand({ SecretId: name }));
+        if (out.DeletedDate) return undefined;
+        const current = Object.entries(out.VersionIdsToStages ?? {}).find(([, st]) =>
+          st.includes("AWSCURRENT"),
+        )?.[0];
+        if (!current) return undefined;
+        return { versionId: current, lastChanged: out.LastChangedDate };
+      } catch (e) {
+        if (errName(e) === "ResourceNotFoundException") return undefined;
+        throw e;
+      }
+    },
+
+    async putSecret(name, value) {
+      try {
+        await sm.send(new PutSecretValueCommand({ SecretId: name, SecretString: value }));
+      } catch (e) {
+        if (errName(e) !== "ResourceNotFoundException") throw e;
+        await sm.send(
+          new CreateSecretCommand({
+            Name: name,
+            SecretString: value,
+            Description: "Flareon sign-in credential",
+          }),
+        );
+      }
+    },
+
+    async deleteSecret(name) {
+      try {
+        await sm.send(
+          new DeleteSecretCommand({ SecretId: name, ForceDeleteWithoutRecovery: true }),
+        );
+        return true;
+      } catch (e) {
+        if (errName(e) === "ResourceNotFoundException") return false;
+        throw e;
+      }
+    },
+
+    async getFunctionEnv(name) {
+      const out = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: name }));
+      return { ...(out.Environment?.Variables ?? {}) };
+    },
+
+    async getParameterValues(path) {
+      const base = path.replace(/\/+$/, "");
+      const out: Record<string, string> = {};
+      let token: string | undefined;
+      do {
+        const page = await ssm.send(
+          new GetParametersByPathCommand({
+            Path: base,
+            Recursive: false,
+            WithDecryption: true,
+            NextToken: token,
+          }),
+        );
+        for (const p of page.Parameters ?? []) {
+          if (p.Name && p.Value !== undefined) out[p.Name.slice(base.length + 1)] = p.Value;
+        }
+        token = page.NextToken;
+      } while (token);
+      return out;
     },
   };
 }

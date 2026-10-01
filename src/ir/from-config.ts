@@ -8,7 +8,34 @@ function toAuth(
 ): AuthIR {
   if (auth === false) return { enabled: false };
   if (auth === undefined || auth === true) return { enabled: true, provider: "cognito" };
-  return { enabled: true, provider: auth.provider ?? "cognito" };
+  const p = auth.provider ?? "cognito";
+  const lower = (xs: string[] | undefined) => (xs ?? []).map((x) => x.toLowerCase());
+  const allow = auth.allow
+    ? { allow: { domains: lower(auth.allow.domains), emails: lower(auth.allow.emails) } }
+    : {};
+  if (p === "entra") {
+    return {
+      enabled: true,
+      provider: "entra",
+      entra: { tenant: (auth.tenant ?? "").toLowerCase() },
+      ...allow,
+    };
+  }
+  if (p === "oidc") {
+    return {
+      enabled: true,
+      provider: "oidc",
+      ...allow,
+      oidc: {
+        issuer: auth.issuer ?? "",
+        scopes: auth.scopes ?? ["openid", "email", "profile"],
+        name: auth.name ?? "OIDC",
+      },
+    };
+  }
+  // saml はスキーマで弾いている
+  if (p !== "cognito" && p !== "google") throw new Error(`internal: unsupported provider ${p}`);
+  return { enabled: true, provider: p, ...allow };
 }
 
 function toHttp(http: FlareonConfig["http"]): HttpIR | null {

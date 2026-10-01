@@ -1,0 +1,3 @@
+# flareon dev（python）の常時 E2E 用。mise run test:e2e:python-env が .flareon/e2e-python に入れる
+fastapi==0.142.2
+uvicorn==0.54.0

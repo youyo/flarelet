@@ -37,3 +37,7 @@ export function domainPrefix(app: string, stage: string, account?: string): stri
 
 export const secretsPath = (app: string, stage: string): string =>
   `/flareon/${app}/${stage}/secrets/`;
+
+/** 外部 IdP の資格情報（Secrets Manager のシークレット名）。stage スコープ。 */
+export const idpSecretName = (app: string, stage: string, name: string): string =>
+  `flareon/${app}/${stage}/auth/${name}`;

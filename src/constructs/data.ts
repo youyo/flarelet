@@ -1,5 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
+import { CfnResource, RemovalPolicy, Stack } from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import type { FlareonIR } from "../ir/index.js";
@@ -35,5 +36,45 @@ export class Data extends Construct {
         autoDeleteObjects: props.lifetime === "destroy",
       });
     }
+    if (props.lifetime === "destroy" && props.ir.storages.length) containAutoDeleteLogs(this);
   }
+}
+
+const AUTO_DELETE_PROVIDER = "Custom::S3AutoDeleteObjectsCustomResourceProvider";
+
+/**
+ * CDK の autoDeleteObjects プロバイダ Lambda（スタックに 1 つ）は暗黙のロググループ（/aws/lambda/...、保持期間なし）に書き、
+ * スタック削除後もそれが残る。スタック内のロググループに向け、実行ロールからロググループ作成権限を外して
+ * （AWSLambdaBasicExecutionRole の代わりに）削除後の再作成も防ぐ（app.ts の functionRole と同じ理由）。
+ */
+function containAutoDeleteLogs(scope: Construct): void {
+  const stack = Stack.of(scope);
+  const provider = stack.node.tryFindChild(AUTO_DELETE_PROVIDER);
+  const handler = provider?.node.tryFindChild("Handler");
+  const role = provider?.node.tryFindChild("Role");
+  if (!(handler instanceof CfnResource) || !(role instanceof CfnResource)) {
+    throw new Error(`internal: ${AUTO_DELETE_PROVIDER} not found`);
+  }
+  if (stack.node.tryFindChild("AutoDeleteLogs")) return;
+  const lg = new logs.LogGroup(stack, "AutoDeleteLogs", {
+    retention: logs.RetentionDays.ONE_WEEK,
+    removalPolicy: RemovalPolicy.DESTROY,
+  });
+  handler.addPropertyOverride("LoggingConfig", { LogGroup: lg.logGroupName });
+  role.addPropertyDeletionOverride("ManagedPolicyArns");
+  role.addPropertyOverride("Policies", [
+    {
+      PolicyName: "WriteLogs",
+      PolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+            Resource: lg.logGroupArn,
+          },
+        ],
+      },
+    },
+  ]);
 }

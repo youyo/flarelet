@@ -76,8 +76,11 @@ export function cliStream(
   args: string[],
   cwd: string,
   onLine: (line: string) => void,
+  onStderr?: (chunk: string) => void,
 ): ChildProcess {
   const child = spawn(process.execPath, [CLI, ...args, "--region", REGION], { cwd, env: ENV });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (d: string) => onStderr?.(d));
   let buf = "";
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (d: string) => {
@@ -98,11 +101,14 @@ function run(cmd: string, args: string[], cwd: string): Promise<void> {
 }
 
 /** フィクスチャをテンポラリにコピーし、flareon.yaml を書く。TypeScript なら依存を入れる。 */
-export async function prepareApp(fixture: "python" | "typescript", yaml: string): Promise<string> {
+export async function prepareApp(
+  fixture: "python" | "typescript" | "dev",
+  yaml: string,
+): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), `flareon-aws-${fixture}-`));
   await cp(join(FIXTURES, fixture), dir, { recursive: true });
   await writeFile(join(dir, "flareon.yaml"), yaml);
-  if (fixture === "typescript") {
+  if (fixture !== "python") {
     await run("npm", ["install", "--no-audit", "--no-fund", "--silent"], join(dir, "app"));
   }
   return dir;
@@ -151,6 +157,12 @@ export async function stackOutputs(name: string): Promise<Record<string, string>
     if (e instanceof Error && /does not exist/.test(e.message)) return undefined;
     throw e;
   }
+}
+
+/** スタックに紐づく CloudFormation サービスロール（CDK の cfn-exec ロール）。無ければ undefined。 */
+export async function stackRoleArn(name: string): Promise<string | undefined> {
+  const out = await cfn.send(new DescribeStacksCommand({ StackName: name }));
+  return out.Stacks?.[0]?.RoleARN;
 }
 
 async function appStacks(app: string): Promise<{ name: string; id: string }[]> {
@@ -295,6 +307,11 @@ export async function leftovers(app: string, t: Tracked): Promise<string[]> {
     }
     if (!gone) left.push(`${type} ${id}`);
   }
+  // スタック外に暗黙作成される Lambda のロググループ（例: CDK の autoDeleteObjects プロバイダ）
+  const implicit = await logs.send(
+    new DescribeLogGroupsCommand({ logGroupNamePrefix: `/aws/lambda/flareon-${app}-` }),
+  );
+  for (const g of implicit.logGroups ?? []) left.push(`log group ${g.logGroupName}`);
   const ssm = new SSMClient({ region: REGION });
   const params = await ssm.send(
     new GetParametersByPathCommand({ Path: `/flareon/${app}`, Recursive: true }),

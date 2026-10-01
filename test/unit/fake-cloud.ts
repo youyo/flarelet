@@ -32,6 +32,7 @@ export class FakeCloud implements Cloud {
   users = new Map<string, Map<string, UserInfo>>();
   deleted: StackResource[] = [];
   failAccount: Error | undefined;
+  liveTail?: NonNullable<Cloud["liveTail"]>;
 
   addStack(s: Partial<StackInfo> & { name: string }): void {
     this.stacks.set(s.name, { status: "CREATE_COMPLETE", tags: {}, outputs: {}, ...s });
@@ -47,6 +48,17 @@ export class FakeCloud implements Cloud {
   }
   async listAppStacks(app: string) {
     return [...this.stacks.values()].filter((s) => s.tags["flareon:app"] === app);
+  }
+  oidcProvider: string | undefined;
+  trustingRoles: string[] = [];
+  async listStacksWithTag(key: string) {
+    return [...this.stacks.values()].filter((s) => key in s.tags);
+  }
+  async findOidcProvider() {
+    return this.oidcProvider;
+  }
+  async listRolesTrustingProvider() {
+    return this.trustingRoles;
   }
   async getTemplate(name: string) {
     return this.stacks.has(name) ? this.templates.get(name) : undefined;
@@ -106,6 +118,32 @@ export class FakeCloud implements Cloud {
   async deleteUser(pool: string, email: string) {
     this.calls.push(`deleteUser:${pool}:${email}`);
     return this.users.get(pool)?.delete(email) ?? false;
+  }
+  /** Secrets Manager（名前 → 値とバージョン）。 */
+  smSecrets = new Map<string, { value: string; versionId: string }>();
+  async describeSecret(name: string) {
+    const v = this.smSecrets.get(name);
+    return v ? { versionId: v.versionId, lastChanged: new Date(0) } : undefined;
+  }
+  async putSecret(name: string, value: string) {
+    this.calls.push(`putSecret:${name}`);
+    this.smSecrets.set(name, { value, versionId: `v${this.smSecrets.size + 1}` });
+  }
+  async deleteSecret(name: string) {
+    this.calls.push(`deleteSecret:${name}`);
+    return this.smSecrets.delete(name);
+  }
+  async getFunctionEnv(name: string) {
+    this.calls.push(`getFunctionEnv:${name}`);
+    const env = this.functionEnv.get(name);
+    if (!env) throw new Error(`no function ${name}`);
+    return env;
+  }
+  async getParameterValues(path: string) {
+    this.calls.push(`getParameterValues:${path}`);
+    const out: Record<string, string> = {};
+    for (const [n, p] of this.params) if (n.startsWith(path)) out[n.slice(path.length)] = p.value;
+    return out;
   }
 }
 
