@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "aws-well-architected-review": {
+      "source": "aws/agent-toolkit-for-aws",
+      "sourceType": "github",
+      "skillPath": "skills/core-skills/aws-well-architected-review/SKILL.md",
+      "computedHash": "e01c1c8bbc54502f8d8f373a427de159b195227e8d2a407d6752742054c7bccd"
+    }
+  }
+}
