@@ -16,7 +16,16 @@ run = "vitest run test/unit"
 [tasks."test:e2e"]
 description = "E2E テスト（ビルド済み CLI を実行）"
 depends = ["build"]
-run = "vitest run test/e2e"
+run = "vitest run test/e2e --exclude 'test/e2e/aws/**'"
+
+[tasks."test:e2e:aws"]
+description = "実 AWS E2E（FLAREON_E2E_AWS=1 のときだけ実行。deploy → 検証 → destroy）"
+depends = ["build", "playwright:install"]
+run = "vitest run test/e2e/aws"
+
+[tasks."playwright:install"]
+description = "E2E 用の Chromium を取得"
+run = "playwright install chromium"
 
 [tasks.test]
 description = "Unit + E2E"

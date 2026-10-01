@@ -1,9 +1,10 @@
-import { App, Aws, CfnOutput, Duration, Stack, type StackProps } from "aws-cdk-lib";
+import { App, Aws, CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { join } from "node:path";
 import type { Construct } from "constructs";
@@ -42,6 +43,35 @@ function lambdaRuntime(ir: FlareonIR): lambda.Runtime {
   }
   return rt;
 }
+
+/** Lambda のロググループ。スタックと一緒に消えるよう明示的に作る（自動作成だとスタック外に残る）。 */
+function functionLogGroup(scope: Construct, id: string): logs.LogGroup {
+  return new logs.LogGroup(scope, id, {
+    retention: logs.RetentionDays.ONE_MONTH,
+    removalPolicy: RemovalPolicy.DESTROY,
+  });
+}
+
+/**
+ * ロググループへの書き込みだけを許可した実行ロール。AWSLambdaBasicExecutionRole（logs:CreateLogGroup on *）を
+ * 使うと、destroy でロググループを消した直後に Lambda が保留中のログを配信してロググループを作り直し、残ってしまう。
+ */
+function functionRole(scope: Construct, id: string, logGroup: logs.LogGroup): iam.Role {
+  const role = new iam.Role(scope, id, {
+    assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+  });
+  role.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+      resources: [logGroup.logGroupArn],
+    }),
+  );
+  return role;
+}
+
+/** CloudFormation のタグ値に使えない文字を `-` にする。 */
+export const tagValue = (v: string): string =>
+  v.replace(/[^\p{L}\p{N}\s_.:/=+\-@]/gu, "-").slice(0, 256);
 
 const AUTH_CALLBACK_PATH = "/__flareon/auth/callback";
 
@@ -85,6 +115,7 @@ export class StageStack extends Stack {
         removalPolicy: removalOf("retain"),
       });
       this.auth = { userPool, domainPrefix: prefix, sessionSecret };
+      new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     }
   }
 }
@@ -141,7 +172,10 @@ export class VersionStack extends Stack {
     }
     for (const m of models) environment[bindingEnvName("AI", m.name, "MODEL_ID")] = m.profileId;
 
+    const appLogs = functionLogGroup(this, "AppLogs");
     const appFn = new lambda.Function(this, "AppFunction", {
+      logGroup: appLogs,
+      role: functionRole(this, "AppRole", appLogs),
       runtime: lambdaRuntime(ir),
       architecture: lambda.Architecture.ARM_64,
       handler: LAUNCHER_HANDLER,
@@ -154,6 +188,9 @@ export class VersionStack extends Stack {
       timeout: Duration.seconds(auth ? 25 : 29),
       environment,
     });
+
+    new CfnOutput(this, "AppFunctionName", { value: appFn.functionName });
+    new CfnOutput(this, "AppLogGroup", { value: appLogs.logGroupName });
 
     // --- least privilege bindings ---
     for (const table of Object.values(data.tables)) table.grantReadWriteData(appFn);
@@ -231,7 +268,10 @@ export class VersionStack extends Stack {
         frontEnv.FLAREON_COGNITO_USER_POOL_ID = sa.userPool.userPoolId;
       }
 
+      const frontLogs = functionLogGroup(this, "FrontLogs");
       const frontFn = new lambda.Function(this, "FrontAuthFunction", {
+        logGroup: frontLogs,
+        role: functionRole(this, "FrontRole", frontLogs),
         runtime: lambda.Runtime.NODEJS_24_X,
         architecture: lambda.Architecture.ARM_64,
         handler: "index.handler",
@@ -245,8 +285,12 @@ export class VersionStack extends Stack {
       previewToken?.grantRead(frontFn);
       integrationTarget = frontFn;
 
+      new CfnOutput(this, "FrontLogGroup", { value: frontLogs.logGroupName });
       if (previewToken) {
         new CfnOutput(this, "PreviewTokenSecretArn", { value: previewToken.secretArn });
+      }
+      if (props.stage?.auth) {
+        new CfnOutput(this, "UserPoolId", { value: props.stage.auth.userPool.userPoolId });
       }
     }
 
@@ -271,6 +315,8 @@ export interface BuildOptions {
   cacheDir?: string;
   /** Docker/esbuild/pip を使わずソースを詰める（テスト/E2E 用）。 */
   skipBundling?: boolean;
+  /** デプロイ元の Git ブランチ（version スタックの `flareon:branch` タグ。env list の表示用）。 */
+  source?: string;
   /** アセットの注入（unit テスト用）。 */
   code?: { app?: lambda.Code; front?: lambda.Code };
 }
@@ -289,6 +335,9 @@ export function buildApp(o: BuildOptions): BuiltApp {
   const app = new App({
     ...(o.outdir ? { outdir: o.outdir } : {}),
     analyticsReporting: false,
+    // CDK CLI が通常付与するコンテキスト。プログラムから synth すると既定で無効なため明示する
+    // （plan の差分と deploy の進捗を Flareon の概念に対応付けるのに使う）。
+    context: { "aws:cdk:enable-path-metadata": true },
   });
   const env = { region: o.region, ...(o.account ? { account: o.account } : {}) };
   const baseTags = { "flareon:app": ir.name, "flareon:stage": deployment.stage };
@@ -325,7 +374,12 @@ export function buildApp(o: BuildOptions): BuiltApp {
   const version = new VersionStack(app, names.version, {
     stackName: names.version,
     env,
-    tags: { ...baseTags, "flareon:version": deployment.version },
+    tags: {
+      ...baseTags,
+      "flareon:version": deployment.version,
+      "flareon:lifecycle": deployment.lifecycle,
+      ...(o.source ? { "flareon:branch": tagValue(o.source) } : {}),
+    },
     ir,
     deployment,
     models,

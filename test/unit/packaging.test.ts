@@ -79,7 +79,9 @@ describe("pythonBundling", () => {
     expect(b.image.image).toContain("sam/build-python3.13");
     expect(b.platform).toBe("linux/arm64");
     const cmd = (b.command ?? []).join(" ");
-    expect(cmd).toContain("pip install -r requirements.txt");
+    expect(cmd).toMatch(/pip install .*-r requirements\.txt/);
+    // deploy の出力を Flareon の進捗に保つため pip は静かにする
+    expect(cmd).toMatch(/pip install .*(-q|--quiet)/);
     expect(cmd).toContain("/asset-output");
   });
 });

@@ -29,10 +29,18 @@ describe("ai model registry", () => {
     expect(resolveModel("nova-pro", "us-east-1").foundationModelId).toBe("amazon.nova-pro-v1:0");
   });
 
-  it("fails clearly when a geo profile is unavailable for the region", () => {
-    expect(() => resolveModel("nova-micro", "ap-northeast-1")).toThrow(
-      /nova-micro.*ap-northeast-1/,
+  it("resolves Nova micro/lite to apac profiles in Asia Pacific", () => {
+    // aws bedrock list-inference-profiles --region ap-northeast-1（2026-10-01）で実在を確認
+    expect(resolveModel("nova-micro", "ap-northeast-1").profileId).toBe(
+      "apac.amazon.nova-micro-v1:0",
     );
+    expect(resolveModel("nova-lite", "ap-northeast-1").profileId).toBe(
+      "apac.amazon.nova-lite-v1:0",
+    );
+  });
+
+  it("fails clearly when a geo profile is unavailable for the region", () => {
+    expect(() => resolveModel("nova-micro", "sa-east-1")).toThrow(/nova-micro.*sa-east-1/);
   });
 
   it("rejects unknown names", () => {

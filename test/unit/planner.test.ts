@@ -69,3 +69,35 @@ Deploy with:
     ).toContain("public endpoint (no authentication)");
   });
 });
+
+describe("plan against deployed state", () => {
+  const d = { stage: "prod", version: "v2", lifecycle: "persistent" } as const;
+
+  it("shows + / ~ / = / - in Flareon terms", () => {
+    const p = buildPlan(full, d, {
+      existing: new Set(["application", "database.main", "storage.files", "authentication"]),
+      changed: new Set(["application", "storage.files"]),
+      removed: new Set(["database.legacy", "ai.nova-micro"]),
+    });
+    const out = renderPlan(p);
+    expect(out).toContain("Flareon will update myapp (prod/v2)");
+    expect(out).toContain("  ~ application version v2");
+    expect(out).toContain("  = database.main");
+    expect(out).toContain("  ~ storage.files");
+    expect(out).toContain("  = authentication");
+    expect(out).toContain("  + ai.sonnet");
+    expect(out).toContain("  - database.legacy");
+    expect(out).toContain("  - ai.nova-micro");
+    // ~ 2, + 2 (ai.sonnet, secrets), - 2
+    expect(out).toContain("6 changes");
+    expect(p.items.find((i) => i.key === "database.legacy")?.action).toBe("delete");
+  });
+
+  it("reports no changes when everything is up to date", () => {
+    const keys = ["application", "database.main", "storage.files", "authentication"];
+    const all = [...keys, "ai.sonnet", "secrets"];
+    const p = buildPlan(full, d, { existing: new Set(all) });
+    expect(p.changes).toBe(0);
+    expect(renderPlan(p)).toContain("No changes");
+  });
+});

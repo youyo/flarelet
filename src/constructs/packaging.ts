@@ -102,7 +102,7 @@ export function pythonBundling(version: string): BundlingOptions {
     command: [
       "bash",
       "-c",
-      "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output",
+      "pip install --quiet --disable-pip-version-check -r requirements.txt -t /asset-output && cp -au . /asset-output",
     ],
   };
 }

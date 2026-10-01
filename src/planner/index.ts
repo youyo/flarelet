@@ -5,7 +5,17 @@ export interface PlanItem {
   /** 既存状態との突き合わせキー（例: `database.main`）。 */
   key: string;
   label: string;
-  action: "create" | "keep";
+  action: "create" | "update" | "keep" | "delete";
+}
+
+/** デプロイ済みの状態（Flareon の概念キー単位）。 */
+export interface PlanState {
+  /** 既に存在するキー。 */
+  existing: ReadonlySet<string>;
+  /** 存在し、かつ変更されるキー。 */
+  changed?: ReadonlySet<string>;
+  /** デプロイ済みだが新しい構成には無いキー。 */
+  removed?: ReadonlySet<string>;
 }
 
 export interface Plan {
@@ -40,26 +50,38 @@ function describe(ir: FlareonIR, d: Deployment): { key: string; label: string }[
   return items;
 }
 
+const SYMBOL: Record<PlanItem["action"], string> = {
+  create: "+",
+  update: "~",
+  keep: "=",
+  delete: "-",
+};
+
 /**
- * IR と解決済みデプロイからプランを作る。`existing` は既に存在するキー（将来、デプロイ済みスタックとの
- * 差分から得る）。AWS 接続が無い段階では空で、すべて「新規作成」になる。
+ * IR と解決済みデプロイからプランを作る。第 3 引数はデプロイ済みの状態（キー集合なら「存在するキー」）。
+ * AWS に接続しない場合は空で、すべて「新規作成」になる。
  */
 export function buildPlan(
   ir: FlareonIR,
   d: Deployment,
-  existing: ReadonlySet<string> = new Set(),
+  state: ReadonlySet<string> | PlanState = new Set<string>(),
 ): Plan {
+  const st: PlanState = state instanceof Set ? { existing: state } : (state as PlanState);
   const items: PlanItem[] = describe(ir, d).map((i) => ({
     ...i,
-    action: existing.has(i.key) ? "keep" : "create",
+    action: !st.existing.has(i.key) ? "create" : st.changed?.has(i.key) ? "update" : "keep",
   }));
-  const changes = items.filter((i) => i.action === "create").length;
+  const known = new Set(items.map((i) => i.key));
+  for (const key of st.removed ?? []) {
+    if (!known.has(key)) items.push({ key, label: key, action: "delete" });
+  }
+  const changes = items.filter((i) => i.action !== "keep").length;
   return {
     app: ir.name,
     stage: d.stage,
     version: d.version,
     lifecycle: d.lifecycle,
-    verb: items.some((i) => i.action === "keep") ? "update" : "create",
+    verb: items.some((i) => i.action !== "create") ? "update" : "create",
     items,
     changes,
   };
@@ -70,9 +92,9 @@ export function renderPlan(p: Plan): string {
     `Flareon will ${p.verb} ${p.app} (${p.stage}/${p.version})` +
       (p.lifecycle === "ephemeral" ? " [ephemeral preview]" : ""),
     "",
-    ...p.items.map((i) => `  ${i.action === "create" ? "+" : "="} ${i.label}`),
+    ...p.items.map((i) => `  ${SYMBOL[i.action]} ${i.label}`),
     "",
-    `${p.changes} ${p.changes === 1 ? "change" : "changes"}`,
+    p.changes === 0 ? "No changes" : `${p.changes} ${p.changes === 1 ? "change" : "changes"}`,
     "",
     "Deploy with:",
     `  flareon deploy --stage ${p.stage} --version ${p.version}`,

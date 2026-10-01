@@ -9,7 +9,12 @@ const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 const EXAMPLES = resolve(import.meta.dirname, "../../examples");
 
 // Docker / pip / npm を避けるため、既定ではバンドルをスキップする。
-const BASE_ENV = { ...process.env, FLAREON_SKIP_BUNDLING: "1", AWS_REGION: "us-east-1" };
+const BASE_ENV = {
+  ...process.env,
+  FLAREON_SKIP_BUNDLING: "1",
+  FLAREON_OFFLINE: "1",
+  AWS_REGION: "us-east-1",
+};
 
 function run(args: string[], cwd: string, env: NodeJS.ProcessEnv = BASE_ENV) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((res) => {

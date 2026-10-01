@@ -8,7 +8,8 @@
  *  - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-micro.html
  *  - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-lite.html
  *  - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-pro.html
- * 確認日: 2026-10-01。モデルを更新するときはここだけを変える。
+ * 確認日: 2026-10-01。apac プロファイルは `aws bedrock list-inference-profiles --region ap-northeast-1`
+ * の実 API 結果（apac.amazon.nova-{micro,lite,pro}-v1:0 が実在）で確認。モデルを更新するときはここだけを変える。
  *
  * このファイルは CDK に依存しない（config 検証からも参照される）。
  */
@@ -26,8 +27,8 @@ const REGISTRY = {
   sonnet: { foundationModelId: "anthropic.claude-sonnet-5-5", profiles: "global" },
   opus: { foundationModelId: "anthropic.claude-opus-5-5", profiles: "global" },
   haiku: { foundationModelId: "anthropic.claude-haiku-4-5-20251001-v1:0", profiles: "global" },
-  "nova-micro": { foundationModelId: "amazon.nova-micro-v1:0", profiles: ["us", "eu"] },
-  "nova-lite": { foundationModelId: "amazon.nova-lite-v1:0", profiles: ["us", "eu"] },
+  "nova-micro": { foundationModelId: "amazon.nova-micro-v1:0", profiles: ["us", "eu", "apac"] },
+  "nova-lite": { foundationModelId: "amazon.nova-lite-v1:0", profiles: ["us", "eu", "apac"] },
   "nova-pro": { foundationModelId: "amazon.nova-pro-v1:0", profiles: ["us", "eu", "apac"] },
 } as const satisfies Record<string, ModelEntry>;
 

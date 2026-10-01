@@ -63,3 +63,8 @@
 - `flareon secret set NAME` → SSM SecureString `/flareon/{app}/{stage}/secrets/{NAME}`（stage スコープ）
 - app Lambda は Flareon 生成のランチャー（LWA の起動コマンド）が起動時に SSM パスから取得して環境変数に設定し、アプリを exec する。Python は boto3、Node は AWS SDK v3（どちらも Lambda ランタイム同梱）を使用。ユーザーコードは `os.environ` / `process.env` で読むだけ
 - IAM: app Lambda に該当パスの `ssm:GetParametersByPath` と `kms:Decrypt`（aws/ssm）
+
+## ユーザー回答による追加決定（Phase 2 以降）
+- Cognito ユーザー管理: `flareon auth user add/list/remove <email>`（管理者招待、自己サインアップ無効）
+- 外部 IdP: `http.auth.provider: google | oidc` を Cognito の IdP として実装。クライアント ID/secret 等は Flareon secrets から渡す。検証は synth レベル（実 IdP ログインは範囲外）
+- `flareon dev`: 既定は専用の dev 環境 `preview/local-<user>`（DB/Storage など stateful binding のみのスタック）を自動作成し、ローカルアプリに環境変数で接続、ファイル監視で再起動。`--stage/--version` 指定時は既存環境のリソースに接続（新規スタック作成なし）

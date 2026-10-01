@@ -449,6 +449,6 @@ describe("PR preview (ephemeral)", () => {
 
 describe("region handling", () => {
   it("fails clearly if an AI model has no profile in the region", () => {
-    expect(() => build(FULL, prod, "ap-northeast-1")).toThrow(/nova-micro.*ap-northeast-1/);
+    expect(() => build(FULL, prod, "sa-east-1")).toThrow(/nova-micro.*sa-east-1/);
   });
 });
