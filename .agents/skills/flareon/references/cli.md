@@ -22,7 +22,7 @@
 
 ### `flareon init [dir]`
 
-`flareon.yaml`・スターターアプリ・`.github/workflows/flareon.yml` を作ります（既存の `flareon.yaml` があるとエラー、ワークフローは既存なら触りません）。`.gitignore` に `.flareon/` を追記します。
+`flareon.yaml`・スターターアプリ・`.github/workflows/flareon.yml` を作ります（既存の `flareon.yaml` があるとエラー、ワークフローは既存なら触りません）。ワークフローの `on.push.branches` は `flareon.yaml` の `git.production.branch` / `git.preview.branch`（`default` はデフォルトブランチ名に置換）から作られます。`.gitignore` に `.flareon/` を追記します。
 
 | オプション            | 内容                                |
 | --------------------- | ----------------------------------- |
@@ -30,7 +30,17 @@
 
 ### `flareon validate`
 
-`flareon.yaml` を検証します。オプションは `-f, --file <path>` のみ。不正なら `flareon.yaml is invalid:` に続けてキーごとのエラーを表示して終了コード 1。
+`flareon.yaml` を検証します。オプションは `-f, --file <path>` のみ。不正なら `flareon.yaml is invalid:` に続けてキーごとのエラーを表示して終了コード 1。`.github/workflows/flareon.yml` が既にあり、その `on.push.branches` が `git` 設定と食い違うときは `Warning:` を表示します（終了コードは 0）。
+
+### `flareon workflow generate`
+
+`flareon.yaml` の `git` 設定（production / preview のブランチ）から `.github/workflows/flareon.yml` を生成します。`git.production.branch: "release/*"` などを変更した後に再生成するために使います。ワークフローが無ければ作成、現在の設定と同じなら `up to date`、異なる既存ファイルは `--force` なしでは変更せず終了コード 1 です。
+
+| オプション                  | 内容                                                         |
+| --------------------------- | ------------------------------------------------------------ |
+| `-f, --file <path>`         | 設定ファイルのパス（既定: `flareon.yaml`）                   |
+| `--force`                   | 異なる既存ワークフローを上書きする（手元の編集は失われます） |
+| `--default-branch <branch>` | リポジトリのデフォルトブランチ（既定: Git から検出）         |
 
 ### `flareon synth`
 

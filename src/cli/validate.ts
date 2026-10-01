@@ -1,6 +1,9 @@
-import { basename } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { ConfigFileNotFoundError, formatIssues, loadConfigFile } from "../config/index.js";
 import { toIR, type FlareonIR } from "../ir/index.js";
+import { checkWorkflowDrift, WORKFLOW_PATH } from "./workflow.js";
 
 export interface Io {
   stdout: (line: string) => void;
@@ -15,7 +18,11 @@ function httpSummary(ir: FlareonIR): string {
 }
 
 /** flareon.yaml を検証し、終了コードを返す。 */
-export async function runValidate(file: string, io: Io): Promise<number> {
+export async function runValidate(
+  file: string,
+  io: Io,
+  opts: { defaultBranch?: string } = {},
+): Promise<number> {
   let result;
   try {
     result = await loadConfigFile(file);
@@ -45,5 +52,11 @@ export async function runValidate(file: string, io: Io): Promise<number> {
   ];
   if (resources.length) io.stdout(`  bindings  ${resources.join(", ")}`);
   if (ir.secrets.length) io.stdout(`  secrets   ${ir.secrets.join(", ")}`);
+
+  const wf = join(dirname(file), WORKFLOW_PATH);
+  if (existsSync(wf)) {
+    const warning = checkWorkflowDrift(await readFile(wf, "utf8"), ir.git, opts.defaultBranch);
+    if (warning) io.stderr(`Warning: ${warning}`);
+  }
   return 0;
 }

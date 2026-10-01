@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { APP_NAME_MIN, NAME_MAX } from "../config/index.js";
+import { APP_NAME_MIN, NAME_MAX, parseConfig } from "../config/index.js";
+import { toIR } from "../ir/index.js";
 import type { RuntimeLanguage } from "../ir/index.js";
 import { scaffold } from "./templates.js";
-import { WORKFLOW_PATH, workflowTemplate } from "./workflow.js";
+import { WORKFLOW_PATH } from "./workflow.js";
+import { renderWorkflow } from "./workflow-generate.js";
 import type { Io } from "./validate.js";
 
 export interface InitArgs {
@@ -58,12 +60,14 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
   const wfExists = existsSync(wfTarget);
   if (!wfExists) {
     await mkdir(dirname(wfTarget), { recursive: true });
+    // 作った flareon.yaml の git 設定から生成する（push トリガーを resolver と一致させる）
+    const yaml = files.find((f) => f.path === "flareon.yaml")?.content ?? "";
+    const parsed = parseConfig(yaml);
+    if (!parsed.ok) throw new Error("internal error: the scaffolded flareon.yaml is invalid");
+    const ir = toIR(parsed.config);
     await writeFile(
       wfTarget,
-      workflowTemplate({
-        runtime: runtime as RuntimeLanguage,
-        branches: [args.defaultBranch ?? "main"],
-      }),
+      renderWorkflow(ir.runtime.language, ir.git, args.defaultBranch ?? "main"),
     );
   }
 

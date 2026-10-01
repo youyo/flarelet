@@ -48,7 +48,7 @@ flareon auth revoke-sessions --stage prod          # 全セッションを失効
 ### PR プレビュー（GitHub Actions）
 
 1. 管理者権限でリポジトリごとに 1 回: `flareon bootstrap github --repo owner/name --region ap-northeast-1`。表示された案内に従い `gh variable set FLAREON_AWS_ROLE_ARN` / `FLAREON_AWS_REGION` を設定
-2. `flareon init` が作ったワークフローをコミットして push。PR の open / synchronize で `flareon deploy --ci`、close で `flareon destroy --ci` が走る
+2. `flareon init` が作ったワークフローをコミットして push。`flareon.yaml` の `git.production.branch` / `git.preview.branch` を変えたら `flareon workflow generate --force` で再生成する（push トリガーのブランチがそれに連動する。`flareon validate` が食い違いを警告）。PR の open / synchronize で `flareon deploy --ci`、close で `flareon destroy --ci` が走る
 3. プレビューの URL は PR コメントに出ます。ブラウザで開くためのトークン付きリンクは `flareon env url --pr 5 --with-token`
 
 ### ローカル開発

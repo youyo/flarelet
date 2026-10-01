@@ -21,6 +21,7 @@ import { runSecretDelete, runSecretList, runSecretSet } from "./secret.js";
 import { defaultSkillDeps, runSkillInstall } from "./skill.js";
 import { defaultSynthDeps, runPlan, runSynth, type SynthArgs } from "./synth.js";
 import { runValidate, type Io } from "./validate.js";
+import { runWorkflowGenerate } from "./workflow-generate.js";
 
 function packageVersion(): string {
   const url = new URL("../../package.json", import.meta.url);
@@ -34,6 +35,16 @@ function packageVersion(): string {
 function withChoices<T extends Option | Argument>(item: T, choices: string[]): T {
   item.argChoices = choices;
   return item;
+}
+
+/** origin/HEAD が無い新規リポジトリは、現在のブランチ（まだコミットが無くても）を既定ブランチとみなす。 */
+async function detectDefaultBranch(dir: string): Promise<string | undefined> {
+  const exec = gitExec(dir);
+  return (
+    (await detectGit({ exec })).defaultBranch ??
+    (await exec(["symbolic-ref", "--short", "HEAD"])) ??
+    undefined
+  );
 }
 
 export function createProgram(): Command {
@@ -50,10 +61,12 @@ export function createProgram(): Command {
     .description("Validate flareon.yaml")
     .option("-f, --file <path>", "path to the config file", "flareon.yaml")
     .action(async (opts: { file: string }) => {
-      process.exitCode = await runValidate(resolve(opts.file), {
-        stdout: (l) => console.log(l),
-        stderr: (l) => console.error(l),
-      });
+      const defaultBranch = await detectDefaultBranch(dirname(resolve(opts.file)));
+      process.exitCode = await runValidate(
+        resolve(opts.file),
+        { stdout: (l) => console.log(l), stderr: (l) => console.error(l) },
+        defaultBranch ? { defaultBranch } : {},
+      );
     });
 
   const io: Io = { stdout: (l) => console.log(l), stderr: (l) => console.error(l) };
@@ -69,17 +82,29 @@ export function createProgram(): Command {
     )
     .action(async (dir: string | undefined, opts: { runtime: string }) => {
       const target = dir ?? ".";
-      const exec = gitExec(resolve(target));
-      // origin/HEAD が無い新規リポジトリは、現在のブランチ（まだコミットが無くても）を既定ブランチとみなす
-      const defaultBranch =
-        (await detectGit({ exec })).defaultBranch ??
-        (await exec(["symbolic-ref", "--short", "HEAD"]));
+      const defaultBranch = await detectDefaultBranch(resolve(target));
       process.exitCode = await runInit(
         {
           dir: target,
           runtime: opts.runtime,
           ...(defaultBranch ? { defaultBranch } : {}),
         },
+        io,
+      );
+    });
+
+  const workflow = program.command("workflow").description("Manage the GitHub Actions workflow");
+  workflow
+    .command("generate")
+    .description("Generate .github/workflows/flareon.yml from the git settings in flareon.yaml")
+    .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+    .option("--force", "overwrite the workflow if it differs")
+    .option("--default-branch <branch>", "the repository default branch")
+    .action(async (opts: { file: string; force?: boolean; defaultBranch?: string }) => {
+      const file = resolve(opts.file);
+      const defaultBranch = opts.defaultBranch ?? (await detectDefaultBranch(dirname(file)));
+      process.exitCode = await runWorkflowGenerate(
+        { file, force: opts.force === true, ...(defaultBranch ? { defaultBranch } : {}) },
         io,
       );
     });

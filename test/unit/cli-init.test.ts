@@ -179,3 +179,12 @@ describe("runInit GitHub workflow", () => {
     expect(out.join("\n")).toContain("FLAREON_AWS_ROLE_ARN");
   });
 });
+
+describe("runInit workflow header", () => {
+  it("mentions regeneration after changing git settings", async () => {
+    const t = io();
+    await runInit({ dir, runtime: "python" }, t.io);
+    const text = await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8");
+    expect(text).toContain("flareon workflow generate --force");
+  });
+});

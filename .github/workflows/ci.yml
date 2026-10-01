@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # completion の E2E が zsh（zpty）を使う
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh
+
+      # mise.toml の [tools]（node / python / actionlint）を導入
+      - uses: jdx/mise-action@v5
+        with:
+          cache: true
+
+      - run: mise run install
+      - run: mise run lint
+      - run: mise run lint:actions
+      - run: mise run typecheck
+      # unit + 常時 E2E（build と python venv の用意を含む）。AWS 資格情報は渡さない
+      - run: mise run test
+      - run: mise run pack:check

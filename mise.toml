@@ -1,6 +1,11 @@
 [tools]
 node = "24"
 python = "3.13"
+actionlint = "1.7.12"
+
+[tasks.install]
+description = "依存をロックファイルどおりに導入（npm ci。CI 用）"
+run = "npm ci"
 
 [tasks.typecheck]
 description = "型チェック"
@@ -59,6 +64,10 @@ run = "npm pack --dry-run"
 [tasks.lint]
 description = "ESLint + Prettier チェック"
 run = ["eslint .", "prettier --check ."]
+
+[tasks."lint:actions"]
+description = "GitHub Actions ワークフローを actionlint で検証"
+run = "actionlint"
 
 [tasks.fmt]
 description = "Prettier で整形"
