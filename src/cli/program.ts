@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { Command, InvalidArgumentError } from "commander";
+import { Argument, Command, InvalidArgumentError, Option } from "commander";
 import { awsCloud } from "../aws/real.js";
 import { toolkitDeployer } from "../aws/toolkit.js";
 import { runRevokeSessions, runUserAdd, runUserList, runUserRemove } from "./auth-user.js";
 import { synthGithubBootstrap } from "../bootstrap/github.js";
 import { gitExec, detectGit } from "../git/index.js";
 import { runBootstrapGithub } from "./bootstrap.js";
+import { runCompletion } from "./completion.js";
 import { runDeploy } from "./deploy.js";
 import { runDestroy } from "./destroy.js";
 import { registerDevCommand } from "./dev-command.js";
@@ -24,6 +25,15 @@ import { runValidate, type Io } from "./validate.js";
 function packageVersion(): string {
   const url = new URL("../../package.json", import.meta.url);
   return (JSON.parse(readFileSync(url, "utf8")) as { version: string }).version;
+}
+
+/**
+ * 補完候補（argChoices）だけを付ける。commander の `.choices()` は検証とエラー文言まで変えてしまうので、
+ * 既存のエラーメッセージを保つため候補の宣言だけにする（検証は各コマンド側）。
+ */
+function withChoices<T extends Option | Argument>(item: T, choices: string[]): T {
+  item.argChoices = choices;
+  return item;
 }
 
 export function createProgram(): Command {
@@ -51,7 +61,12 @@ export function createProgram(): Command {
   program
     .command("init [dir]")
     .description("Create flareon.yaml and a starter app")
-    .option("--runtime <runtime>", "python or typescript", "python")
+    .addOption(
+      withChoices(new Option("--runtime <runtime>", "python or typescript").default("python"), [
+        "python",
+        "typescript",
+      ]),
+    )
     .action(async (dir: string | undefined, opts: { runtime: string }) => {
       const target = dir ?? ".";
       const exec = gitExec(resolve(target));
@@ -258,7 +273,12 @@ export function createProgram(): Command {
     github
       .command("comment")
       .description("Create or update the PR comment and GitHub Deployment for a preview")
-      .option("--state <state>", "success, failure or inactive", "success")
+      .addOption(
+        withChoices(
+          new Option("--state <state>", "success, failure or inactive").default("success"),
+          ["success", "failure", "inactive"],
+        ),
+      )
       .option(
         "--with-token",
         "include the preview magic link (contains the token; private repositories only)",
@@ -325,6 +345,22 @@ export function createProgram(): Command {
     });
 
   registerDevCommand(program, opsDeps);
+
+  program
+    .command("completion")
+    .description("Print the shell completion script (zsh only)")
+    .addArgument(withChoices(new Argument("<shell>", "target shell: zsh"), ["zsh"]))
+    .addHelpText(
+      "after",
+      `
+Install (zsh):
+  flareon completion zsh > "\${fpath[1]}/_flareon"
+or add this to ~/.zshrc (after compinit):
+  eval "$(flareon completion zsh)"`,
+    )
+    .action((shell: string) => {
+      process.exitCode = runCompletion(shell, program, io);
+    });
 
   return program;
 }

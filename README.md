@@ -24,6 +24,8 @@ node dist/cli/index.js --help
 
 `flareon` コマンドとして使うには `npm link`（またはビルド成果物へのエイリアス）を使います。npm へはまだ公開していません。
 
+zsh を使うなら補完も入れられます（`eval "$(flareon completion zsh)"` を `.zshrc` の `compinit` の後に。詳細は「シェル補完（zsh）」）。
+
 AWS 側の前提: 対象アカウント・リージョンで `cdk bootstrap` 済みであること、認証情報（SSO など）が有効であること。リージョンは `--region`、`AWS_REGION`、`AWS_DEFAULT_REGION` の順で決まります（未指定は `us-east-1`）。
 
 ## クイックスタート
@@ -131,9 +133,20 @@ stage は小文字英数字とハイフン（16 文字まで）、version は 32
 | `flareon auth revoke-sessions`                              | その環境の Flareon セッションをすべて失効させる（最大 60 秒で反映）                               |
 | `flareon github comment [--state ...] [--with-token]`       | PR コメントと GitHub Deployment を更新（CI 用）                                                   |
 | `flareon bootstrap github --repo owner/name [--destroy]`    | GitHub Actions 用の AWS IAM ロールを作成／削除                                                    |
+| `flareon completion zsh`                                    | zsh 補完スクリプトを出力（「シェル補完」を参照）                                                  |
 | `flareon skill install [--global] [--dir <path>] [--force]` | AI エージェント向けスキルをインストール（「AI エージェント向けスキル」を参照）                    |
 
 デプロイ先を決める共通オプション: `-f/--file`、`--stage`、`--version`、`--branch`、`--pr`、`--default-branch`、`--region`。
+
+## シェル補完（zsh）
+
+```bash
+flareon completion zsh > "${fpath[1]}/_flareon"   # fpath の先頭ディレクトリに置く（次のシェルから有効）
+# または ~/.zshrc に（compinit より後に）
+eval "$(flareon completion zsh)"
+```
+
+補完スクリプトは CLI のコマンド定義から生成するので、コマンドやオプションが増えても自動で追従します。コマンド・サブコマンド・オプションに加えて、`--runtime`・`--state` の値と `-f/--file`・`--dir` のパスを補完します（`--stage` / `--version` は AWS を呼ばないため補完しません）。対応シェルは zsh のみです。
 
 ## AI エージェント向けスキル
 

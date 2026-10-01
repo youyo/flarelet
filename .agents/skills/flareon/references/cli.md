@@ -178,6 +178,19 @@ GitHub Actions が OIDC で assume する IAM ロールを作成／削除しま�
 | `--dir <path>` | プロジェクトのルートを指定（既定: カレントディレクトリ）。`--global` とは併用不可    |
 | `--force`      | 既存のインストールを置き換える（無いと、既存があれば拒否）                           |
 
+## シェル補完
+
+### `flareon completion <shell>`
+
+シェル補完スクリプトを標準出力に出します。対応は `zsh` のみ（それ以外は `unsupported shell` のエラーで終了コード 1）。スクリプトは CLI のコマンド定義から生成されるので、コマンドやオプションを足すと補完にも反映されます。
+
+```bash
+flareon completion zsh > "${fpath[1]}/_flareon"      # fpath に置く
+eval "$(flareon completion zsh)"                      # または ~/.zshrc に書く（compinit の後）
+```
+
+補完されるのはコマンド・サブコマンド・オプション（説明つき）と、`--runtime`（python / typescript）、`--state`（success / failure / inactive）、`-f/--file`・`--dir`（ファイル／ディレクトリ）の値です。`--stage` / `--version` は AWS を呼ばないため補完しません。
+
 ## 環境変数
 
 | 変数                                                    | 内容                                                       |
