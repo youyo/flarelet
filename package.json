@@ -19,7 +19,8 @@
   },
   "files": [
     "dist",
-    ".agents/skills"
+    ".agents/skills",
+    "README.ja.md"
   ],
   "engines": {
     "node": ">=24"
