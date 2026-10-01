@@ -1,7 +1,7 @@
 import type { IIoHost, IoMessage, IoRequest } from "@aws-cdk/toolkit-lib";
 import { conceptOf } from "./concepts.js";
 
-/** toolkit-lib のメッセージを Flareon の概念に畳んだ進捗イベント。生の CFN イベントは表に出さない。 */
+/** toolkit-lib のメッセージを Flarelet の概念に畳んだ進捗イベント。生の CFN イベントは表に出さない。 */
 export type ProgressEvent =
   | { type: "assets" }
   | { type: "stack-start"; stack: string }
@@ -21,7 +21,7 @@ interface StackActivityData {
 /** 非対話。確認要求（IAM 変更の承認・destroy 確認）は自動承認する（CLI 側で事前確認済みの前提）。 */
 const AUTO_APPROVE = new Set(["CDK_TOOLKIT_I5060", "CDK_TOOLKIT_I7010", "CDK_TOOLKIT_I5050"]);
 
-export class FlareonIoHost implements IIoHost {
+export class FlareletIoHost implements IIoHost {
   private assetsReported = false;
 
   constructor(private readonly emit: (e: ProgressEvent) => void) {}

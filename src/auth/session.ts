@@ -5,7 +5,7 @@ import type { ApiEvent, AuthMode, Identity } from "./types.js";
  * `__Host-` プレフィックス: ブラウザが Secure・Path=/・Domain なしの場合だけ受け付ける
  * （同一サイトの別ホストや非 HTTPS からの上書き・注入を防ぐ）。
  */
-export const SESSION_COOKIE = "__Host-flareon_session";
+export const SESSION_COOKIE = "__Host-flarelet_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
 const COOKIE_ATTRS = "HttpOnly; Secure; SameSite=Lax";
@@ -108,7 +108,7 @@ export function readSession(
     return undefined;
   // allow ポリシーがある場合、同じポリシーで発行したセッションだけを受け付ける
   if (policy !== undefined && p["ap"] !== policy) return undefined;
-  // セッション世代が変わった（flareon auth revoke-sessions / auth user remove）セッションは受け付けない
+  // セッション世代が変わった（flarelet auth revoke-sessions / auth user remove）セッションは受け付けない
   if (epoch !== undefined && p["se"] !== epoch) return undefined;
   const identity: Identity = { sub: p["sub"] };
   if (typeof p["email"] === "string") identity.email = p["email"];

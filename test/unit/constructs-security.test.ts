@@ -41,7 +41,7 @@ const pool = (stage: Stack) =>
 
 const front = (version: Stack) => {
   const fns = Template.fromStack(version).findResources("AWS::Lambda::Function");
-  return Object.values(fns).find((f) => JSON.stringify(f).includes("FLAREON_AUTH_MODE")) as {
+  return Object.values(fns).find((f) => JSON.stringify(f).includes("FLARELET_AUTH_MODE")) as {
     Properties: { Environment: { Variables: Record<string, unknown> } };
   };
 };
@@ -74,8 +74,8 @@ describe("F1: cognito-native pools keep the original email until the new one is 
 
 describe("F4: session epoch parameter", () => {
   it("names are stage scoped for persistent stages and version scoped for PR previews", () => {
-    expect(sessionEpochParam("myapp", prod)).toBe("/flareon/myapp/prod/auth/session-epoch");
-    expect(sessionEpochParam("myapp", pr)).toBe("/flareon/myapp/preview/auth/pr-7/session-epoch");
+    expect(sessionEpochParam("myapp", prod)).toBe("/flarelet/myapp/prod/auth/session-epoch");
+    expect(sessionEpochParam("myapp", pr)).toBe("/flarelet/myapp/preview/auth/pr-7/session-epoch");
     // 永続 stage の secrets（アプリが GetParametersByPath で読むパス）とは別
     expect(sessionEpochParam("myapp", prod)).not.toContain("/secrets/");
   });
@@ -83,14 +83,14 @@ describe("F4: session epoch parameter", () => {
   it("persistent: the stage stack owns a String parameter, and only the front can read it", () => {
     const { stage, version } = build(COGNITO, prod);
     Template.fromStack(stage!).hasResourceProperties("AWS::SSM::Parameter", {
-      Name: "/flareon/myapp/prod/auth/session-epoch",
+      Name: "/flarelet/myapp/prod/auth/session-epoch",
       Type: "String",
     });
     Template.fromStack(stage!).hasResource("AWS::SSM::Parameter", { DeletionPolicy: "Delete" });
     Template.fromStack(version).resourceCountIs("AWS::SSM::Parameter", 0);
     // 名前はリテラルで渡す（クロススタック Export を作らない）
-    expect(front(version).Properties.Environment.Variables.FLAREON_SESSION_EPOCH_PARAM).toBe(
-      "/flareon/myapp/prod/auth/session-epoch",
+    expect(front(version).Properties.Environment.Variables.FLARELET_SESSION_EPOCH_PARAM).toBe(
+      "/flarelet/myapp/prod/auth/session-epoch",
     );
     const ssm = statements(version, "FrontRole").filter((s) =>
       JSON.stringify(s.Action).includes("ssm:"),
@@ -98,7 +98,7 @@ describe("F4: session epoch parameter", () => {
     expect(ssm).toHaveLength(1);
     expect(ssm[0]!.Action).toBe("ssm:GetParameter");
     expect(JSON.stringify(ssm[0]!.Resource)).toContain(
-      ":parameter/flareon/myapp/prod/auth/session-epoch",
+      ":parameter/flarelet/myapp/prod/auth/session-epoch",
     );
     expect(JSON.stringify(statements(version, "AppRole"))).not.toContain("session-epoch");
   });
@@ -107,11 +107,11 @@ describe("F4: session epoch parameter", () => {
     const { stage, version } = build(COGNITO, pr);
     expect(stage).toBeUndefined();
     Template.fromStack(version).hasResourceProperties("AWS::SSM::Parameter", {
-      Name: "/flareon/myapp/preview/auth/pr-7/session-epoch",
+      Name: "/flarelet/myapp/preview/auth/pr-7/session-epoch",
       Type: "String",
     });
-    expect(front(version).Properties.Environment.Variables.FLAREON_SESSION_EPOCH_PARAM).toBe(
-      "/flareon/myapp/preview/auth/pr-7/session-epoch",
+    expect(front(version).Properties.Environment.Variables.FLARELET_SESSION_EPOCH_PARAM).toBe(
+      "/flarelet/myapp/preview/auth/pr-7/session-epoch",
     );
   });
 
@@ -122,6 +122,6 @@ describe("F4: session epoch parameter", () => {
   });
 
   it("is reported as authentication in plan / deploy", () => {
-    expect(conceptOf("flareon-a-prod/SessionEpoch/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-a-prod/SessionEpoch/Resource")).toBe("authentication");
   });
 });

@@ -153,7 +153,7 @@ export function awsCloud(region: string): Cloud {
       do {
         const page = await cfn.send(new DescribeStacksCommand({ NextToken: token }));
         for (const s of page.Stacks ?? []) {
-          if (s.Tags?.some((t) => t.Key === "flareon:app" && t.Value === app)) out.push(toInfo(s));
+          if (s.Tags?.some((t) => t.Key === "flarelet:app" && t.Value === app)) out.push(toInfo(s));
         }
         token = page.NextToken;
       } while (token);
@@ -503,7 +503,7 @@ export function awsCloud(region: string): Cloud {
           new CreateSecretCommand({
             Name: name,
             SecretString: value,
-            Description: "Flareon sign-in credential",
+            Description: "Flarelet sign-in credential",
           }),
         );
       }

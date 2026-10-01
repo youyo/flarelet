@@ -15,7 +15,7 @@ ai: { models: [haiku] }
 secrets: [API_KEY, OTHER_KEY]
 `;
 
-const DEV_STACK = "flareon-myapp-preview-local-naoto";
+const DEV_STACK = "flarelet-myapp-preview-local-naoto";
 
 interface DevHarness extends Harness {
   dev: DevDeps;
@@ -56,16 +56,16 @@ async function devHarness(yaml = YAML, env: Record<string, string> = {}): Promis
 
 const devOutputs = {
   Bindings: JSON.stringify({
-    FLAREON_DATABASE_MAIN_TABLE: "dev-table",
-    FLAREON_STORAGE_FILES_BUCKET: "dev-bucket",
+    FLARELET_DATABASE_MAIN_TABLE: "dev-table",
+    FLARELET_STORAGE_FILES_BUCKET: "dev-bucket",
   }),
 };
 
-describe("flareon dev (default: preview/local-<user>)", () => {
+describe("flarelet dev (default: preview/local-<user>)", () => {
   it("deploys a stateful-only dev stack and starts the app connected to it", async () => {
     h = await devHarness();
     h.deployer.result = [{ name: DEV_STACK, outputs: devOutputs }];
-    h.cloud.params.set("/flareon/myapp/preview/secrets/API_KEY", {
+    h.cloud.params.set("/flarelet/myapp/preview/secrets/API_KEY", {
       value: "s3cr3t-value",
       lastModified: new Date(0),
     });
@@ -77,25 +77,25 @@ describe("flareon dev (default: preview/local-<user>)", () => {
       deployment: { stage: "preview", version: "local-naoto" },
       region: "ap-northeast-1",
       account: "123456789012",
-      outdir: join(h.dir, ".flareon", "dev", "out"),
+      outdir: join(h.dir, ".flarelet", "dev", "out"),
     });
-    expect(h.deployer.outdirs).toEqual([join(h.dir, ".flareon", "dev", "out")]);
+    expect(h.deployer.outdirs).toEqual([join(h.dir, ".flarelet", "dev", "out")]);
     expect(h.synthCalls).toHaveLength(0); // 通常の app スタックは作らない
 
     const s = h.started[0]!;
     expect(s).toMatchObject({ appDir: h.dir, language: "python", port: 8787 });
     expect(s.env).toMatchObject({
       AWS_REGION: "ap-northeast-1",
-      FLAREON_APP: "myapp",
-      FLAREON_STAGE: "preview",
-      FLAREON_VERSION: "local-naoto",
-      FLAREON_DATABASE_MAIN_TABLE: "dev-table",
-      FLAREON_STORAGE_FILES_BUCKET: "dev-bucket",
+      FLARELET_APP: "myapp",
+      FLARELET_STAGE: "preview",
+      FLARELET_VERSION: "local-naoto",
+      FLARELET_DATABASE_MAIN_TABLE: "dev-table",
+      FLARELET_STORAGE_FILES_BUCKET: "dev-bucket",
       API_KEY: "s3cr3t-value",
-      // ローカルのプロキシは常にクライアント由来の x-flareon-* を剥がす（--as のときだけ付け直す）
-      FLAREON_AUTH_ENABLED: "true",
+      // ローカルのプロキシは常にクライアント由来の x-flarelet-* を剥がす（--as のときだけ付け直す）
+      FLARELET_AUTH_ENABLED: "true",
     });
-    expect(s.env.FLAREON_AI_HAIKU_MODEL_ID).toMatch(/haiku/);
+    expect(s.env.FLARELET_AI_HAIKU_MODEL_ID).toMatch(/haiku/);
     expect(s.env.OTHER_KEY).toBeUndefined();
     expect(h.stopped).toBe(1);
   });
@@ -103,13 +103,13 @@ describe("flareon dev (default: preview/local-<user>)", () => {
   it("prints the startup screen without secret values", async () => {
     h = await devHarness();
     h.deployer.result = [{ name: DEV_STACK, outputs: devOutputs }];
-    h.cloud.params.set("/flareon/myapp/preview/secrets/API_KEY", {
+    h.cloud.params.set("/flarelet/myapp/preview/secrets/API_KEY", {
       value: "s3cr3t-value",
       lastModified: new Date(0),
     });
     await runDev({ file: h.file }, h.dev);
     const out = h.out.join("\n");
-    expect(out).toContain("Flareon dev");
+    expect(out).toContain("Flarelet dev");
     expect(out).toMatch(/App\s+myapp/);
     expect(out).toMatch(/Stage\s+preview/);
     expect(out).toMatch(/Version\s+local-naoto/);
@@ -121,7 +121,7 @@ describe("flareon dev (default: preview/local-<user>)", () => {
     expect(out).toMatch(/secrets\.API_KEY\s+loaded/);
     expect(out).toMatch(/secrets\.OTHER_KEY\s+not set/);
     expect(out).toContain("Watching...");
-    expect(out).toContain("flareon destroy --stage preview --version local-naoto");
+    expect(out).toContain("flarelet destroy --stage preview --version local-naoto");
     expect([...h.out, ...h.err].join("\n")).not.toContain("s3cr3t-value");
   });
 
@@ -156,7 +156,7 @@ describe("flareon dev (default: preview/local-<user>)", () => {
     h.cloud.failAccount = new Error("no credentials");
     expect(await runDev({ file: h.file }, h.dev)).toBe(1);
     expect(h.err.join("\n")).toMatch(/cannot reach AWS.*no credentials/);
-    expect(h.err.join("\n")).toMatch(/FLAREON_OFFLINE=1/);
+    expect(h.err.join("\n")).toMatch(/FLARELET_OFFLINE=1/);
   });
 
   it("reports a local startup failure (e.g. port in use)", async () => {
@@ -173,9 +173,9 @@ describe("flareon dev (default: preview/local-<user>)", () => {
     h.cloud.addStack({
       name: DEV_STACK,
       tags: {
-        "flareon:app": "myapp",
-        "flareon:stage": "preview",
-        "flareon:version": "local-naoto",
+        "flarelet:app": "myapp",
+        "flarelet:stage": "preview",
+        "flarelet:version": "local-naoto",
       },
     });
     expect(
@@ -185,22 +185,22 @@ describe("flareon dev (default: preview/local-<user>)", () => {
   });
 });
 
-describe("flareon dev --stage/--version (connect to an existing environment)", () => {
+describe("flarelet dev --stage/--version (connect to an existing environment)", () => {
   it("reads the bindings from the deployed app function and creates nothing", async () => {
     h = await devHarness();
     h.cloud.addStack({
-      name: "flareon-myapp-prod-v1",
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod", "flareon:version": "v1" },
+      name: "flarelet-myapp-prod-v1",
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod", "flarelet:version": "v1" },
       outputs: { AppFunctionName: "app-fn" },
     });
     h.cloud.functionEnv.set("app-fn", {
       PORT: "8080",
       AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
-      FLAREON_DATABASE_MAIN_TABLE: "prod-table",
-      FLAREON_STORAGE_FILES_BUCKET: "prod-bucket",
-      FLAREON_AI_HAIKU_MODEL_ID: "prod-model",
+      FLARELET_DATABASE_MAIN_TABLE: "prod-table",
+      FLARELET_STORAGE_FILES_BUCKET: "prod-bucket",
+      FLARELET_AI_HAIKU_MODEL_ID: "prod-model",
     });
-    h.cloud.params.set("/flareon/myapp/prod/secrets/API_KEY", {
+    h.cloud.params.set("/flarelet/myapp/prod/secrets/API_KEY", {
       value: "prod-secret",
       lastModified: new Date(0),
     });
@@ -209,11 +209,11 @@ describe("flareon dev --stage/--version (connect to an existing environment)", (
     expect(h.deployer.outdirs).toHaveLength(0);
     const env = h.started[0]!.env;
     expect(env).toMatchObject({
-      FLAREON_STAGE: "prod",
-      FLAREON_VERSION: "v1",
-      FLAREON_DATABASE_MAIN_TABLE: "prod-table",
-      FLAREON_STORAGE_FILES_BUCKET: "prod-bucket",
-      FLAREON_AI_HAIKU_MODEL_ID: "prod-model",
+      FLARELET_STAGE: "prod",
+      FLARELET_VERSION: "v1",
+      FLARELET_DATABASE_MAIN_TABLE: "prod-table",
+      FLARELET_STORAGE_FILES_BUCKET: "prod-bucket",
+      FLARELET_AI_HAIKU_MODEL_ID: "prod-model",
       API_KEY: "prod-secret",
     });
     expect(env.PORT).toBeUndefined();
@@ -221,13 +221,13 @@ describe("flareon dev --stage/--version (connect to an existing environment)", (
     const out = h.out.join("\n");
     expect(out).toMatch(/Stage\s+prod/);
     expect(out).toMatch(/database\.main\s+connected/);
-    expect(out).not.toContain("flareon destroy");
+    expect(out).not.toContain("flarelet destroy");
   });
 
   it("marks bindings missing from the deployed version", async () => {
     h = await devHarness();
-    h.cloud.addStack({ name: "flareon-myapp-prod-v1", outputs: { AppFunctionName: "app-fn" } });
-    h.cloud.functionEnv.set("app-fn", { FLAREON_DATABASE_MAIN_TABLE: "t" });
+    h.cloud.addStack({ name: "flarelet-myapp-prod-v1", outputs: { AppFunctionName: "app-fn" } });
+    h.cloud.functionEnv.set("app-fn", { FLARELET_DATABASE_MAIN_TABLE: "t" });
     expect(await runDev({ file: h.file, stage: "prod", version: "v1" }, h.dev)).toBe(0);
     expect(h.out.join("\n")).toMatch(/storage\.files\s+not deployed/);
   });
@@ -246,16 +246,16 @@ describe("flareon dev --stage/--version (connect to an existing environment)", (
   });
 });
 
-describe("flareon dev offline (FLAREON_OFFLINE=1)", () => {
+describe("flarelet dev offline (FLARELET_OFFLINE=1)", () => {
   it("starts the app without touching AWS and shows bindings as offline", async () => {
-    h = await devHarness(YAML, { FLAREON_OFFLINE: "1" });
+    h = await devHarness(YAML, { FLARELET_OFFLINE: "1" });
     expect(await runDev({ file: h.file }, h.dev)).toBe(0);
     expect(h.cloud.calls).toEqual([]);
     expect(h.devSynth).toHaveLength(0);
     const out = h.out.join("\n");
     expect(out).toMatch(/database\.main\s+offline/);
     expect(out).toMatch(/secrets\.API_KEY\s+offline/);
-    expect(h.started[0]!.env.FLAREON_DATABASE_MAIN_TABLE).toBeUndefined();
-    expect(h.started[0]!.env.FLAREON_VERSION).toBe("local-naoto");
+    expect(h.started[0]!.env.FLARELET_DATABASE_MAIN_TABLE).toBeUndefined();
+    expect(h.started[0]!.env.FLARELET_VERSION).toBe("local-naoto");
   });
 });

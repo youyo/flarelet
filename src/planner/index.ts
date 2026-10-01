@@ -1,4 +1,4 @@
-import { effectiveAuth, type FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareletIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 
 export interface PlanItem {
@@ -8,7 +8,7 @@ export interface PlanItem {
   action: "create" | "update" | "keep" | "delete";
 }
 
-/** デプロイ済みの状態（Flareon の概念キー単位）。 */
+/** デプロイ済みの状態（Flarelet の概念キー単位）。 */
 export interface PlanState {
   /** 既に存在するキー。 */
   existing: ReadonlySet<string>;
@@ -28,7 +28,7 @@ export interface Plan {
   changes: number;
 }
 
-function describe(ir: FlareonIR, d: Deployment): { key: string; label: string }[] {
+function describe(ir: FlareletIR, d: Deployment): { key: string; label: string }[] {
   const items = [{ key: "application", label: `application version ${d.version}` }];
   for (const db of ir.databases)
     items.push({ key: `database.${db.name}`, label: `database.${db.name}` });
@@ -64,7 +64,7 @@ const SYMBOL: Record<PlanItem["action"], string> = {
  * AWS に接続しない場合は空で、すべて「新規作成」になる。
  */
 export function buildPlan(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   state: ReadonlySet<string> | PlanState = new Set<string>(),
 ): Plan {
@@ -91,7 +91,7 @@ export function buildPlan(
 
 export function renderPlan(p: Plan): string {
   const lines = [
-    `Flareon will ${p.verb} ${p.app} (${p.stage}/${p.version})` +
+    `Flarelet will ${p.verb} ${p.app} (${p.stage}/${p.version})` +
       (p.lifecycle === "ephemeral" ? " [ephemeral preview]" : ""),
     "",
     ...p.items.map((i) => `  ${SYMBOL[i.action]} ${i.label}`),
@@ -99,7 +99,7 @@ export function renderPlan(p: Plan): string {
     p.changes === 0 ? "No changes" : `${p.changes} ${p.changes === 1 ? "change" : "changes"}`,
     "",
     "Deploy with:",
-    `  flareon deploy --stage ${p.stage} --version ${p.version}`,
+    `  flarelet deploy --stage ${p.stage} --version ${p.version}`,
     "",
   ];
   return lines.join("\n");

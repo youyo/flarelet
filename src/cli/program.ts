@@ -50,7 +50,7 @@ async function detectDefaultBranch(dir: string): Promise<string | undefined> {
 export function createProgram(): Command {
   const program = new Command();
   program
-    .name("flareon")
+    .name("flarelet")
     .description("Serverless application platform for AWS")
     .version(packageVersion())
     // サブコマンドの --version <version> とグローバルの --version を衝突させない
@@ -58,8 +58,8 @@ export function createProgram(): Command {
 
   program
     .command("validate")
-    .description("Validate flareon.yaml")
-    .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+    .description("Validate flarelet.yaml")
+    .option("-f, --file <path>", "path to the config file", "flarelet.yaml")
     .action(async (opts: { file: string }) => {
       const defaultBranch = await detectDefaultBranch(dirname(resolve(opts.file)));
       process.exitCode = await runValidate(
@@ -73,7 +73,7 @@ export function createProgram(): Command {
 
   program
     .command("init [dir]")
-    .description("Create flareon.yaml and a starter app")
+    .description("Create flarelet.yaml and a starter app")
     .addOption(
       withChoices(new Option("--runtime <runtime>", "python or typescript").default("python"), [
         "python",
@@ -96,8 +96,8 @@ export function createProgram(): Command {
   const workflow = program.command("workflow").description("Manage the GitHub Actions workflow");
   workflow
     .command("generate")
-    .description("Generate .github/workflows/flareon.yml from the git settings in flareon.yaml")
-    .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+    .description("Generate .github/workflows/flarelet.yml from the git settings in flarelet.yaml")
+    .option("-f, --file <path>", "path to the config file", "flarelet.yaml")
     .option("--force", "overwrite the workflow if it differs")
     .option("--default-branch <branch>", "the repository default branch")
     .action(async (opts: { file: string; force?: boolean; defaultBranch?: string }) => {
@@ -111,7 +111,7 @@ export function createProgram(): Command {
 
   const targetOptions = (cmd: Command): Command =>
     cmd
-      .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+      .option("-f, --file <path>", "path to the config file", "flarelet.yaml")
       .option("--stage <stage>", "stage name (overrides Git)")
       .option("--version <version>", "version name (overrides Git)")
       .option("--branch <branch>", "Git branch to resolve (default: current branch)")
@@ -145,7 +145,7 @@ export function createProgram(): Command {
   };
 
   targetOptions(
-    program.command("synth").description("Generate the CDK Cloud Assembly into .flareon/out"),
+    program.command("synth").description("Generate the CDK Cloud Assembly into .flarelet/out"),
   ).action(async (o: Record<string, unknown>) => {
     const a = toArgs(o);
     process.exitCode = await runSynth(a, defaultSynthDeps(io, dirname(a.file)));
@@ -193,7 +193,7 @@ export function createProgram(): Command {
   env
     .command("list")
     .description("List deployed stages and versions")
-    .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+    .option("-f, --file <path>", "path to the config file", "flarelet.yaml")
     .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
     .action(async (o: Record<string, unknown>) => {
       const a = toArgs(o);
@@ -330,12 +330,12 @@ export function createProgram(): Command {
     .command("github")
     .description("Create the IAM role GitHub Actions of a repository assumes via OIDC")
     .requiredOption("--repo <owner/name>", "GitHub repository")
-    .option("--destroy", "remove the role (and the OIDC provider if Flareon created it)")
+    .option("--destroy", "remove the role (and the OIDC provider if Flarelet created it)")
     .option("--qualifier <qualifier>", "CDK bootstrap qualifier", "hnb659fds")
     .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
     .action(async (o: Record<string, unknown>) => {
       const a = {
-        file: resolve("flareon.yaml"),
+        file: resolve("flarelet.yaml"),
         ...(typeof o.region === "string" ? { region: o.region } : {}),
       };
       process.exitCode = await runBootstrapGithub(
@@ -354,7 +354,7 @@ export function createProgram(): Command {
     .description("AI coding agent skill")
     .enablePositionalOptions()
     .command("install")
-    .description("Install the bundled flareon skill for AI coding agents (Claude Code etc.)")
+    .description("Install the bundled flarelet skill for AI coding agents (Claude Code etc.)")
     .option("--global", "install for the current user (~/.agents/skills, ~/.claude/skills)")
     .option("--dir <path>", "project root to install into (default: current directory)")
     .option("--force", "replace an existing installation")
@@ -379,9 +379,9 @@ export function createProgram(): Command {
       "after",
       `
 Install (zsh):
-  flareon completion zsh > "\${fpath[1]}/_flareon"
+  flarelet completion zsh > "\${fpath[1]}/_flarelet"
 or add this to ~/.zshrc (after compinit):
-  eval "$(flareon completion zsh)"`,
+  eval "$(flarelet completion zsh)"`,
     )
     .action((shell: string) => {
       process.exitCode = runCompletion(shell, program, io);

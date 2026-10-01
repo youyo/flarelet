@@ -45,23 +45,23 @@ describe("version stack tags", () => {
   it("records lifecycle and the Git source branch (sanitized for tag values)", () => {
     const { version } = build(FULL, prod, { source: "release/v1" });
     expect(version.tags.tagValues()).toMatchObject({
-      "flareon:lifecycle": "persistent",
-      "flareon:branch": "release/v1",
+      "flarelet:lifecycle": "persistent",
+      "flarelet:branch": "release/v1",
     });
     const odd = build(FULL, prod, { source: "feat/#12 a*b" }).version;
-    expect(odd.tags.tagValues()["flareon:branch"]).toBe("feat/-12 a-b");
+    expect(odd.tags.tagValues()["flarelet:branch"]).toBe("feat/-12 a-b");
   });
 
   it("marks PR previews as ephemeral and omits the branch tag when unknown", () => {
     const { version } = build(FULL, pr);
-    expect(version.tags.tagValues()["flareon:lifecycle"]).toBe("ephemeral");
-    expect(version.tags.tagValues()).not.toHaveProperty("flareon:branch");
+    expect(version.tags.tagValues()["flarelet:lifecycle"]).toBe("ephemeral");
+    expect(version.tags.tagValues()).not.toHaveProperty("flarelet:branch");
   });
 
   it("does not put the branch tag on the shared stage stack", () => {
     const { stage } = build(FULL, prod, { source: "release/v1" });
-    expect(stage!.tags.tagValues()).not.toHaveProperty("flareon:branch");
-    expect(stage!.tags.tagValues()).not.toHaveProperty("flareon:version");
+    expect(stage!.tags.tagValues()).not.toHaveProperty("flarelet:branch");
+    expect(stage!.tags.tagValues()).not.toHaveProperty("flarelet:version");
   });
 });
 
@@ -113,7 +113,7 @@ describe("auth outputs", () => {
 });
 
 describe("construct path metadata", () => {
-  it("records aws:cdk:path on every resource (plan diff and deploy progress map it to Flareon concepts)", () => {
+  it("records aws:cdk:path on every resource (plan diff and deploy progress map it to Flarelet concepts)", () => {
     const { stage, version } = build(FULL, prod);
     for (const s of [stage!, version]) {
       const resources = Template.fromStack(s).toJSON().Resources as Record<

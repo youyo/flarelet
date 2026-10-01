@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 const BASE_ENV = {
   ...process.env,
-  FLAREON_SKIP_BUNDLING: "1",
-  FLAREON_OFFLINE: "1",
+  FLARELET_SKIP_BUNDLING: "1",
+  FLARELET_OFFLINE: "1",
   AWS_REGION: "ap-northeast-1",
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
   AWS_SECRET_ACCESS_KEY: "invalid",
@@ -43,23 +43,23 @@ interface WorkflowDoc {
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-gh-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-gh-"));
 });
 afterEach(async () => rm(dir, { recursive: true, force: true }));
 
-describe("flareon init (workflow)", () => {
-  it("writes .github/workflows/flareon.yml once and never overwrites it", async () => {
+describe("flarelet init (workflow)", () => {
+  it("writes .github/workflows/flarelet.yml once and never overwrites it", async () => {
     const proj = join(dir, "myapp");
     const r = await run(["init", "--runtime", "typescript", proj], dir);
     expect(r.code, r.stderr).toBe(0);
-    const file = join(proj, ".github/workflows/flareon.yml");
+    const file = join(proj, ".github/workflows/flarelet.yml");
     const doc = parseYaml(await readFile(file, "utf8")) as WorkflowDoc;
     expect(doc.permissions["id-token"]).toBe("write");
     expect(doc.on.pull_request.types).toContain("closed");
-    expect(r.stdout).toContain("flareon bootstrap github --repo");
+    expect(r.stdout).toContain("flarelet bootstrap github --repo");
 
     await writeFile(file, "mine: true\n");
-    await rm(join(proj, "flareon.yaml"));
+    await rm(join(proj, "flarelet.yaml"));
     const again = await run(["init", "--runtime", "typescript", proj], dir);
     expect(again.code).toBe(0);
     expect(await readFile(file, "utf8")).toBe("mine: true\n");
@@ -71,10 +71,10 @@ describe("flareon init (workflow)", () => {
     await mkdir(proj);
     await new Promise((res) => execFile("git", ["init", "-b", "trunk"], { cwd: proj }, res));
     await run(["init", proj], dir);
-    expect(await readFile(join(proj, ".github/workflows/flareon.yml"), "utf8")).toContain(
+    expect(await readFile(join(proj, ".github/workflows/flarelet.yml"), "utf8")).toContain(
       "branches: [trunk]",
     );
-    expect(existsSync(join(proj, "flareon.yaml"))).toBe(true);
+    expect(existsSync(join(proj, "flarelet.yaml"))).toBe(true);
   });
 });
 

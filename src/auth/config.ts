@@ -5,7 +5,7 @@ interface Base {
   mode: AuthMode;
   appFunctionName: string;
   sessionSecretArn: string;
-  /** セッション世代の SSM パラメータ名（flareon auth revoke-sessions で更新する）。 */
+  /** セッション世代の SSM パラメータ名（flarelet auth revoke-sessions で更新する）。 */
   sessionEpochParam: string;
 }
 
@@ -49,7 +49,7 @@ function parseProvider(v: string | undefined): IdpKind {
   if (v === undefined || v === "") return "cognito";
   if (!(IDP_KINDS as readonly string[]).includes(v)) {
     throw new Error(
-      `FLAREON_AUTH_PROVIDER must be one of ${IDP_KINDS.join(", ")} (got ${JSON.stringify(v)})`,
+      `FLARELET_AUTH_PROVIDER must be one of ${IDP_KINDS.join(", ")} (got ${JSON.stringify(v)})`,
     );
   }
   return v as IdpKind;
@@ -57,37 +57,37 @@ function parseProvider(v: string | undefined): IdpKind {
 
 /** front auth Lambda の環境変数契約（DECISIONS.md）をパースする。 */
 export function parseAuthConfig(env: Env): AuthConfig {
-  const mode = env["FLAREON_AUTH_MODE"];
+  const mode = env["FLARELET_AUTH_MODE"];
   if (mode !== "cognito" && mode !== "preview") {
     throw new Error(
-      `FLAREON_AUTH_MODE must be "cognito" or "preview" (got ${JSON.stringify(mode)})`,
+      `FLARELET_AUTH_MODE must be "cognito" or "preview" (got ${JSON.stringify(mode)})`,
     );
   }
   const base = {
-    appFunctionName: required(env, "FLAREON_APP_FUNCTION_NAME"),
-    sessionSecretArn: required(env, "FLAREON_SESSION_SECRET_ARN"),
-    sessionEpochParam: required(env, "FLAREON_SESSION_EPOCH_PARAM"),
+    appFunctionName: required(env, "FLARELET_APP_FUNCTION_NAME"),
+    sessionSecretArn: required(env, "FLARELET_SESSION_SECRET_ARN"),
+    sessionEpochParam: required(env, "FLARELET_SESSION_EPOCH_PARAM"),
   };
   if (mode === "preview") {
     return {
       mode,
       ...base,
-      previewTokenSecretArn: required(env, "FLAREON_PREVIEW_TOKEN_SECRET_ARN"),
+      previewTokenSecretArn: required(env, "FLARELET_PREVIEW_TOKEN_SECRET_ARN"),
     };
   }
-  const domains = list(env["FLAREON_AUTH_ALLOW_DOMAINS"]);
-  const emails = list(env["FLAREON_AUTH_ALLOW_EMAILS"]);
+  const domains = list(env["FLARELET_AUTH_ALLOW_DOMAINS"]);
+  const emails = list(env["FLARELET_AUTH_ALLOW_EMAILS"]);
   return {
     mode,
     ...base,
     cognito: {
-      provider: parseProvider(env["FLAREON_AUTH_PROVIDER"]),
+      provider: parseProvider(env["FLARELET_AUTH_PROVIDER"]),
       ...(domains.length || emails.length ? { allow: { domains, emails } } : {}),
-      domain: required(env, "FLAREON_COGNITO_DOMAIN").replace(/\/+$/, ""),
-      clientId: required(env, "FLAREON_COGNITO_CLIENT_ID"),
-      userPoolId: required(env, "FLAREON_COGNITO_USER_POOL_ID"),
-      ...(env["FLAREON_COGNITO_IDENTITY_PROVIDER"]
-        ? { identityProvider: env["FLAREON_COGNITO_IDENTITY_PROVIDER"] }
+      domain: required(env, "FLARELET_COGNITO_DOMAIN").replace(/\/+$/, ""),
+      clientId: required(env, "FLARELET_COGNITO_CLIENT_ID"),
+      userPoolId: required(env, "FLARELET_COGNITO_USER_POOL_ID"),
+      ...(env["FLARELET_COGNITO_IDENTITY_PROVIDER"]
+        ? { identityProvider: env["FLARELET_COGNITO_IDENTITY_PROVIDER"] }
         : {}),
     },
   };

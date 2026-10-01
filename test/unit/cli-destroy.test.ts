@@ -15,25 +15,25 @@ let h: Harness;
 afterEach(async () => h?.cleanup());
 
 const tags = (stage: string, version?: string) => ({
-  "flareon:app": "myapp",
-  "flareon:stage": stage,
-  ...(version ? { "flareon:version": version } : {}),
+  "flarelet:app": "myapp",
+  "flarelet:stage": stage,
+  ...(version ? { "flarelet:version": version } : {}),
 });
 
 async function prodWith(...versions: string[]) {
   h = await harness(YAML);
-  h.cloud.addStack({ name: "flareon-myapp-prod", tags: tags("prod") });
+  h.cloud.addStack({ name: "flarelet-myapp-prod", tags: tags("prod") });
   for (const v of versions) {
-    h.cloud.addStack({ name: `flareon-myapp-prod-${v}`, tags: tags("prod", v) });
+    h.cloud.addStack({ name: `flarelet-myapp-prod-${v}`, tags: tags("prod", v) });
   }
-  h.cloud.resources.set("flareon-myapp-prod", [
+  h.cloud.resources.set("flarelet-myapp-prod", [
     { logicalId: "T", physicalId: "tbl", type: "AWS::DynamoDB::Table" },
     { logicalId: "B", physicalId: "bkt", type: "AWS::S3::Bucket" },
     { logicalId: "P", physicalId: "pool", type: "AWS::Cognito::UserPool" },
     { logicalId: "S", physicalId: "arn:secret", type: "AWS::SecretsManager::Secret" },
     { logicalId: "D", physicalId: "dom", type: "AWS::Cognito::UserPoolDomain" },
   ]);
-  h.cloud.params.set("/flareon/myapp/prod/secrets/API_KEY", {
+  h.cloud.params.set("/flarelet/myapp/prod/secrets/API_KEY", {
     value: "x",
     lastModified: new Date(0),
   });
@@ -43,8 +43,8 @@ describe("runDestroy", () => {
   it("removes only the version stack of a persistent stage by default", async () => {
     await prodWith("v1");
     expect(await runDestroy({ file: h.file, stage: "prod", version: "v1" }, h.deps)).toBe(0);
-    expect(h.cloud.calls).toContain("deleteStack:flareon-myapp-prod-v1");
-    expect(h.cloud.calls).not.toContain("deleteStack:flareon-myapp-prod");
+    expect(h.cloud.calls).toContain("deleteStack:flarelet-myapp-prod-v1");
+    expect(h.cloud.calls).not.toContain("deleteStack:flarelet-myapp-prod");
     expect(h.cloud.deleted).toEqual([]);
     expect(h.out.join("\n")).toMatch(/kept.*--stage-resources/s);
   });
@@ -83,8 +83,8 @@ describe("runDestroy", () => {
     ).toBe(0);
     const order = h.cloud.calls.filter((c) => c.startsWith("delete"));
     expect(order.slice(0, 2)).toEqual([
-      "deleteStack:flareon-myapp-prod-v1",
-      "deleteStack:flareon-myapp-prod",
+      "deleteStack:flarelet-myapp-prod-v1",
+      "deleteStack:flarelet-myapp-prod",
     ]);
     expect(h.cloud.deleted.map((r) => r.type).sort()).toEqual([
       "AWS::Cognito::UserPool",
@@ -92,14 +92,14 @@ describe("runDestroy", () => {
       "AWS::S3::Bucket",
       "AWS::SecretsManager::Secret",
     ]);
-    expect(h.cloud.calls).toContain("deleteParameter:/flareon/myapp/prod/secrets/API_KEY");
+    expect(h.cloud.calls).toContain("deleteParameter:/flarelet/myapp/prod/secrets/API_KEY");
   });
 
   it("deletes the whole PR preview stack", async () => {
     h = await harness(YAML);
-    h.cloud.addStack({ name: "flareon-myapp-preview-pr-5", tags: tags("preview", "pr-5") });
+    h.cloud.addStack({ name: "flarelet-myapp-preview-pr-5", tags: tags("preview", "pr-5") });
     expect(await runDestroy({ file: h.file, pr: 5 }, h.deps)).toBe(0);
-    expect(h.cloud.calls).toContain("deleteStack:flareon-myapp-preview-pr-5");
+    expect(h.cloud.calls).toContain("deleteStack:flarelet-myapp-preview-pr-5");
     expect(h.out.join("\n")).toContain("preview/pr-5");
   });
 

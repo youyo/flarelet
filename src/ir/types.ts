@@ -45,8 +45,8 @@ export interface GitIR {
   pullRequests: boolean;
 }
 
-/** 正規化済み Flareon IR。YAML スキーマと CDK 実装の境界。 */
-export interface FlareonIR {
+/** 正規化済み Flarelet IR。YAML スキーマと CDK 実装の境界。 */
+export interface FlareletIR {
   version: 1;
   name: string;
   runtime: { language: RuntimeLanguage; version: string };

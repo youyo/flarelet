@@ -1,22 +1,22 @@
 import type { Cloud } from "../aws/cloud.js";
 import { idpSecretNames } from "../config/names.js";
 import { domainPrefix, idpSecretName } from "../constructs/names.js";
-import type { FlareonIR } from "../ir/index.js";
+import type { FlareletIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 
 /**
- * 外部 IdP（Google / OIDC / Entra ID）の資格情報。値は Secrets Manager（`flareon/{app}/{stage}/auth/{NAME}`）に置き、
+ * 外部 IdP（Google / OIDC / Entra ID）の資格情報。値は Secrets Manager（`flarelet/{app}/{stage}/auth/{NAME}`）に置き、
  * CloudFormation の動的参照で Cognito に渡す。アプリには渡さない。
  */
 
 /** 設定中の provider が要求する資格情報名（PR preview でも stage 単位の名前は同じ）。 */
-export function idpNamesOf(ir: FlareonIR): string[] {
+export function idpNamesOf(ir: FlareletIR): string[] {
   const auth = ir.http?.auth;
   return auth?.enabled ? idpSecretNames(auth.provider) : [];
 }
 
 /** 外部 IdP を実際に作る（= 永続 stage にデプロイする）ときだけ資格情報が要る。 */
-export const needsIdpSecrets = (ir: FlareonIR, d: Deployment): boolean =>
+export const needsIdpSecrets = (ir: FlareletIR, d: Deployment): boolean =>
   d.lifecycle === "persistent" && idpNamesOf(ir).length > 0;
 
 export interface IdpSecretState {
@@ -27,7 +27,7 @@ export interface IdpSecretState {
 
 export async function idpSecretState(
   cloud: Cloud,
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
 ): Promise<IdpSecretState> {
   const versions: Record<string, string> = {};
@@ -42,7 +42,7 @@ export async function idpSecretState(
 
 /** IdP 側（Google / Entra / OIDC のアプリ登録）に登録する Cognito のリダイレクト URI。 */
 export function idpRedirectUri(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   region: string,
   account: string,
@@ -51,7 +51,7 @@ export function idpRedirectUri(
 }
 
 export function missingIdpMessage(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   missing: string[],
   redirectUri: string,
@@ -60,7 +60,7 @@ export function missingIdpMessage(
   const provider = auth?.enabled ? auth.provider : "";
   return [
     `Error: sign-in with ${provider} needs ${missing.join(" and ")} for the ${d.stage} stage. Set ${missing.length > 1 ? "them" : "it"} first:`,
-    ...missing.map((n) => `  flareon secret set ${n} --stage ${d.stage}`),
+    ...missing.map((n) => `  flarelet secret set ${n} --stage ${d.stage}`),
     `Register this redirect URI with the ${provider} app: ${redirectUri}`,
   ];
 }

@@ -8,7 +8,7 @@ import {
 import type { AddressInfo } from "node:net";
 
 /**
- * `flareon dev` の前段プロキシ。本番の front auth Lambda と同様にクライアント由来の `x-flareon-*` を必ず消す。
+ * `flarelet dev` の前段プロキシ。本番の front auth Lambda と同様にクライアント由来の `x-flarelet-*` を必ず消す。
  * ローカルでは認証しないので identity は付けない。`--as <email>` のときだけ擬似 identity を付ける。
  * アプリの再起動中はしばらく待ってから転送する。
  */
@@ -19,8 +19,8 @@ export interface ProxyOptions {
   targetPort: number;
   identity?: string;
   /**
-   * 転送するリクエストに付ける `x-flareon-dev-secret`。アプリ側（flareon/runtime の identity()）は
-   * FLAREON_DEV_SECRET と一致するときだけ identity ヘッダを信用する（プロキシを経由しない直接アクセス対策）。
+   * 転送するリクエストに付ける `x-flarelet-dev-secret`。アプリ側（flarelet/runtime の identity()）は
+   * FLARELET_DEV_SECRET と一致するときだけ identity ヘッダを信用する（プロキシを経由しない直接アクセス対策）。
    */
   secret?: string;
   /** アプリが応答するまで待つ時間。 */
@@ -34,15 +34,15 @@ export interface DevProxy {
 
 const RETRYABLE = new Set(["ECONNREFUSED", "ECONNRESET", "EPIPE"]);
 
-export const DEV_SECRET_HEADER = "x-flareon-dev-secret";
+export const DEV_SECRET_HEADER = "x-flarelet-dev-secret";
 
 export function identityHeaders(email: string): Record<string, string> {
   return {
-    "x-flareon-user-email": email,
+    "x-flarelet-user-email": email,
     // 利用者が自分で指定した擬似ユーザーなので検証済みとして扱う
-    "x-flareon-user-email-verified": "true",
-    "x-flareon-user-sub": `dev:${email}`,
-    "x-flareon-auth-mode": "dev",
+    "x-flarelet-user-email-verified": "true",
+    "x-flarelet-user-sub": `dev:${email}`,
+    "x-flarelet-auth-mode": "dev",
   };
 }
 
@@ -53,7 +53,7 @@ function forwardHeaders(
 ): IncomingHttpHeaders {
   const out: IncomingHttpHeaders = {};
   for (const [k, v] of Object.entries(h)) {
-    if (!k.toLowerCase().startsWith("x-flareon-")) out[k] = v;
+    if (!k.toLowerCase().startsWith("x-flarelet-")) out[k] = v;
   }
   if (identity) Object.assign(out, identityHeaders(identity));
   if (secret) out[DEV_SECRET_HEADER] = secret;
@@ -82,7 +82,7 @@ export function isCrossSite(h: IncomingHttpHeaders): boolean {
 
 function forbid(res: ServerResponse, why: string): void {
   res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
-  res.end(`Flareon dev: ${why}\n`);
+  res.end(`Flarelet dev: ${why}\n`);
 }
 
 function sendOnce(
@@ -135,7 +135,7 @@ export function startProxy(o: ProxyOptions): Promise<DevProxy> {
         }
         res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
         res.end(
-          `Flareon dev: the app is not responding on port ${o.targetPort} (${code || String(e)}). Check the terminal for errors.\n`,
+          `Flarelet dev: the app is not responding on port ${o.targetPort} (${code || String(e)}). Check the terminal for errors.\n`,
         );
         return;
       }

@@ -4,9 +4,9 @@ import { loadIR } from "./load.js";
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { regionOf, resolveTarget, type SynthArgs } from "./synth.js";
 
-const PREVIEW_AUTH_PATH = "/__flareon/auth/preview";
+const PREVIEW_AUTH_PATH = "/__flarelet/auth/preview";
 
-/** CloudFormation のスタック状態を Flareon の状態にする。 */
+/** CloudFormation のスタック状態を Flarelet の状態にする。 */
 export function statusOf(cfn: string): string {
   if (cfn === "DELETE_IN_PROGRESS") return "deleting";
   if (/ROLLBACK_COMPLETE$|_FAILED$/.test(cfn)) return "failed";
@@ -39,16 +39,16 @@ export async function runEnvList(
     return 1;
   }
   const versions = stacks
-    .filter((s) => s.tags["flareon:version"] !== undefined)
+    .filter((s) => s.tags["flarelet:version"] !== undefined)
     .map((s) => {
-      const version = s.tags["flareon:version"]!;
+      const version = s.tags["flarelet:version"]!;
       const type =
-        s.tags["flareon:lifecycle"] ?? lifecycleOf(s.tags["flareon:stage"] ?? "", version);
+        s.tags["flarelet:lifecycle"] ?? lifecycleOf(s.tags["flarelet:stage"] ?? "", version);
       return [
-        s.tags["flareon:stage"] ?? "-",
+        s.tags["flarelet:stage"] ?? "-",
         version,
         type,
-        s.tags["flareon:branch"] ?? "-",
+        s.tags["flarelet:branch"] ?? "-",
         statusOf(s.status),
         s.outputs.ApiUrl ?? "-",
       ];

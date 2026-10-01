@@ -62,12 +62,12 @@ export async function runDestroy(args: DestroyArgs, deps: OpsDeps): Promise<numb
     if (wantStage) {
       const others = (await cloud.listAppStacks(ir.name)).filter(
         (s) =>
-          s.tags["flareon:stage"] === d.stage &&
-          s.tags["flareon:version"] !== undefined &&
+          s.tags["flarelet:stage"] === d.stage &&
+          s.tags["flarelet:version"] !== undefined &&
           s.name !== names.version,
       );
       if (others.length) {
-        const vs = others.map((s) => s.tags["flareon:version"]).join(", ");
+        const vs = others.map((s) => s.tags["flarelet:version"]).join(", ");
         io.stderr(
           `Error: other versions of ${d.stage} are still deployed (${vs}); destroy them first`,
         );
@@ -86,7 +86,7 @@ export async function runDestroy(args: DestroyArgs, deps: OpsDeps): Promise<numb
         io.stdout("");
         io.stdout(
           `Stage resources of ${d.stage} (database, storage, users, secrets) are kept. ` +
-            `To delete them permanently: flareon destroy --stage ${d.stage} --version ${d.version} --stage-resources --yes`,
+            `To delete them permanently: flarelet destroy --stage ${d.stage} --version ${d.version} --stage-resources --yes`,
         );
       }
       return 0;

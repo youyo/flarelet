@@ -117,11 +117,11 @@ describe("test helper: findCycle", () => {
 describe("names", () => {
   it("builds stack names", () => {
     expect(stackNames("myapp", prod)).toEqual({
-      stage: "flareon-myapp-prod",
-      version: "flareon-myapp-prod-v1",
+      stage: "flarelet-myapp-prod",
+      version: "flarelet-myapp-prod-v1",
     });
     expect(stackNames("myapp", pr).stage).toBeUndefined();
-    expect(stackNames("myapp", pr).version).toBe("flareon-myapp-preview-pr-123");
+    expect(stackNames("myapp", pr).version).toBe("flarelet-myapp-preview-pr-123");
   });
 
   it("domain prefix is deterministic, valid for Cognito and varies with the account", () => {
@@ -144,10 +144,10 @@ describe("persistent stage: stage stack", () => {
   const t = Template.fromStack(stage!);
 
   it("is named per lifecycle scope and tagged", () => {
-    expect(stage!.stackName).toBe("flareon-myapp-prod");
+    expect(stage!.stackName).toBe("flarelet-myapp-prod");
     expect(stage!.tags.tagValues()).toMatchObject({
-      "flareon:app": "myapp",
-      "flareon:stage": "prod",
+      "flarelet:app": "myapp",
+      "flarelet:stage": "prod",
     });
   });
 
@@ -217,11 +217,11 @@ describe("persistent stage: version stack", () => {
   const t = Template.fromStack(version);
 
   it("is named, tagged and depends on the stage stack", () => {
-    expect(version.stackName).toBe("flareon-myapp-prod-v1");
+    expect(version.stackName).toBe("flarelet-myapp-prod-v1");
     expect(version.tags.tagValues()).toMatchObject({
-      "flareon:app": "myapp",
-      "flareon:stage": "prod",
-      "flareon:version": "v1",
+      "flarelet:app": "myapp",
+      "flarelet:stage": "prod",
+      "flarelet:version": "v1",
     });
     expect(version.dependencies).toContain(stage);
   });
@@ -237,21 +237,21 @@ describe("persistent stage: version stack", () => {
     t.hasResourceProperties("AWS::Lambda::Function", {
       Runtime: "python3.13",
       Architectures: ["arm64"],
-      Handler: "flareon-launcher.sh",
+      Handler: "flarelet-launcher.sh",
       Layers: ["arn:aws:lambda:us-east-1:753240598075:layer:LambdaAdapterLayerArm64:30"],
       Environment: {
         Variables: Match.objectLike({
           AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
           PORT: "8080",
-          FLAREON_APP: "myapp",
-          FLAREON_STAGE: "prod",
-          FLAREON_VERSION: "v1",
-          FLAREON_SECRETS_PATH: "/flareon/myapp/prod/secrets/",
-          FLAREON_DATABASE_MAIN_TABLE: Match.anyValue(),
-          FLAREON_DATABASE_SESSIONS_TABLE: Match.anyValue(),
-          FLAREON_STORAGE_FILES_BUCKET: Match.anyValue(),
-          FLAREON_AI_SONNET_MODEL_ID: "global.anthropic.claude-sonnet-5-5",
-          FLAREON_AI_NOVA_MICRO_MODEL_ID: "us.amazon.nova-micro-v1:0",
+          FLARELET_APP: "myapp",
+          FLARELET_STAGE: "prod",
+          FLARELET_VERSION: "v1",
+          FLARELET_SECRETS_PATH: "/flarelet/myapp/prod/secrets/",
+          FLARELET_DATABASE_MAIN_TABLE: Match.anyValue(),
+          FLARELET_DATABASE_SESSIONS_TABLE: Match.anyValue(),
+          FLARELET_STORAGE_FILES_BUCKET: Match.anyValue(),
+          FLARELET_AI_SONNET_MODEL_ID: "global.anthropic.claude-sonnet-5-5",
+          FLARELET_AI_NOVA_MICRO_MODEL_ID: "us.amazon.nova-micro-v1:0",
         }),
       },
     });
@@ -264,12 +264,12 @@ describe("persistent stage: version stack", () => {
       Handler: "index.handler",
       Environment: {
         Variables: Match.objectLike({
-          FLAREON_AUTH_MODE: "cognito",
-          FLAREON_APP_FUNCTION_NAME: Match.anyValue(),
-          FLAREON_SESSION_SECRET_ARN: Match.anyValue(),
-          FLAREON_COGNITO_DOMAIN: Match.anyValue(),
-          FLAREON_COGNITO_CLIENT_ID: Match.anyValue(),
-          FLAREON_COGNITO_USER_POOL_ID: Match.anyValue(),
+          FLARELET_AUTH_MODE: "cognito",
+          FLARELET_APP_FUNCTION_NAME: Match.anyValue(),
+          FLARELET_SESSION_SECRET_ARN: Match.anyValue(),
+          FLARELET_COGNITO_DOMAIN: Match.anyValue(),
+          FLARELET_COGNITO_CLIENT_ID: Match.anyValue(),
+          FLARELET_COGNITO_USER_POOL_ID: Match.anyValue(),
         }),
       },
     });
@@ -285,7 +285,7 @@ describe("persistent stage: version stack", () => {
     const fns = Object.values(t.findResources("AWS::Lambda::Function")).map(
       (f) => [f.Properties.Handler, f.Properties.Timeout] as [string, number],
     );
-    const app = fns.find(([h]) => h === "flareon-launcher.sh")![1];
+    const app = fns.find(([h]) => h === "flarelet-launcher.sh")![1];
     const front = fns.find(([h]) => h === "index.handler")![1];
     expect(app).toBeLessThan(front);
     expect(front).toBeLessThanOrEqual(30);
@@ -298,7 +298,7 @@ describe("persistent stage: version stack", () => {
     expect(invoke).toHaveLength(1);
   });
 
-  it("creates a public PKCE client with callback = API URL + /__flareon/auth/callback", () => {
+  it("creates a public PKCE client with callback = API URL + /__flarelet/auth/callback", () => {
     t.resourceCountIs("AWS::Cognito::UserPoolClient", 1);
     t.hasResourceProperties("AWS::Cognito::UserPoolClient", {
       GenerateSecret: false,
@@ -308,7 +308,7 @@ describe("persistent stage: version stack", () => {
       CallbackURLs: [Match.anyValue()],
     });
     const client = Object.values(t.findResources("AWS::Cognito::UserPoolClient"))[0]!;
-    expect(JSON.stringify(client.Properties.CallbackURLs)).toContain("/__flareon/auth/callback");
+    expect(JSON.stringify(client.Properties.CallbackURLs)).toContain("/__flarelet/auth/callback");
     t.resourceCountIs("AWS::Cognito::UserPool", 0);
     t.resourceCountIs("AWS::Cognito::ManagedLoginBranding", 1);
   });
@@ -341,10 +341,10 @@ describe("persistent stage: version stack", () => {
     const ssm = all.filter((s) => [s.Action].flat().some((a) => a.startsWith("ssm:")));
     expect(ssm).toHaveLength(2);
     const byPath = ssm.find((s) => s.Action === "ssm:GetParametersByPath")!;
-    expect(JSON.stringify(byPath.Resource)).toContain("parameter/flareon/myapp/prod/secrets");
+    expect(JSON.stringify(byPath.Resource)).toContain("parameter/flarelet/myapp/prod/secrets");
     const epoch = ssm.find((s) => s.Action === "ssm:GetParameter")!;
     expect(JSON.stringify(epoch.Resource)).toContain(
-      "parameter/flareon/myapp/prod/auth/session-epoch",
+      "parameter/flarelet/myapp/prod/auth/session-epoch",
     );
     expect(JSON.stringify(epoch.Resource)).not.toContain("*");
 
@@ -374,7 +374,7 @@ describe("http.auth: false", () => {
     t.resourceCountIs("AWS::Cognito::UserPoolClient", 0);
     t.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
     t.hasResourceProperties("AWS::Lambda::Permission", { Principal: "apigateway.amazonaws.com" });
-    t.hasResourceProperties("AWS::Lambda::Function", { Handler: "flareon-launcher.sh" });
+    t.hasResourceProperties("AWS::Lambda::Function", { Handler: "flarelet-launcher.sh" });
   });
 
   it("still keeps data in a stage stack", () => {
@@ -402,9 +402,9 @@ describe("PR preview with http.auth: false (Preview Auth is forced)", () => {
       Handler: "index.handler",
       Environment: {
         Variables: Match.objectLike({
-          FLAREON_AUTH_MODE: "preview",
-          FLAREON_PREVIEW_TOKEN_SECRET_ARN: Match.anyValue(),
-          FLAREON_SESSION_SECRET_ARN: Match.anyValue(),
+          FLARELET_AUTH_MODE: "preview",
+          FLARELET_PREVIEW_TOKEN_SECRET_ARN: Match.anyValue(),
+          FLARELET_SESSION_SECRET_ARN: Match.anyValue(),
         }),
       },
     });
@@ -427,17 +427,17 @@ describe("PR preview with http.auth: false (Preview Auth is forced)", () => {
 
   it("tells the app that identity headers come from the front Lambda", () => {
     t.hasResourceProperties("AWS::Lambda::Function", {
-      Handler: "flareon-launcher.sh",
+      Handler: "flarelet-launcher.sh",
       Timeout: 25,
-      Environment: { Variables: Match.objectLike({ FLAREON_AUTH_ENABLED: "true" }) },
+      Environment: { Variables: Match.objectLike({ FLARELET_AUTH_ENABLED: "true" }) },
     });
   });
 });
 
-describe("FLAREON_AUTH_ENABLED (whether a front auth layer strips x-flareon-* headers)", () => {
+describe("FLARELET_AUTH_ENABLED (whether a front auth layer strips x-flarelet-* headers)", () => {
   const appEnv = (yaml: string, d: Deployment) =>
     Template.fromStack(build(yaml, d).version).findResources("AWS::Lambda::Function", {
-      Properties: { Handler: "flareon-launcher.sh" },
+      Properties: { Handler: "flarelet-launcher.sh" },
     });
   const envOf = (r: Record<string, unknown>) =>
     (Object.values(r)[0] as { Properties: { Environment: { Variables: Record<string, string> } } })
@@ -449,11 +449,11 @@ describe("FLAREON_AUTH_ENABLED (whether a front auth layer strips x-flareon-* he
           "version: 1\nname: myapp\nruntime: { language: python }\nhttp: { auth: false }\n",
           prod,
         ),
-      ).FLAREON_AUTH_ENABLED,
+      ).FLARELET_AUTH_ENABLED,
     ).toBe("false");
     expect(
       envOf(appEnv("version: 1\nname: myapp\nruntime: { language: python }\nhttp: true\n", prod))
-        .FLAREON_AUTH_ENABLED,
+        .FLARELET_AUTH_ENABLED,
     ).toBe("true");
   });
 });
@@ -467,18 +467,18 @@ describe("secret tags (used by the CI role to read only preview tokens)", () => 
         ).map((x) => [x.Key, x.Value]),
       ),
     );
-  it("tags PR preview secrets with flareon:stage=preview and flareon:lifecycle=ephemeral", () => {
+  it("tags PR preview secrets with flarelet:stage=preview and flarelet:lifecycle=ephemeral", () => {
     const tags = secretTags(Template.fromStack(build(FULL, pr).version));
     expect(tags).toHaveLength(2);
     for (const t of tags) {
-      expect(t).toMatchObject({ "flareon:stage": "preview", "flareon:lifecycle": "ephemeral" });
+      expect(t).toMatchObject({ "flarelet:stage": "preview", "flarelet:lifecycle": "ephemeral" });
     }
   });
   it("the persistent stage signing key is tagged with its stage and no ephemeral lifecycle", () => {
     const tags = secretTags(Template.fromStack(build(FULL, prod).stage!));
     expect(tags).toHaveLength(1);
-    expect(tags[0]!["flareon:stage"]).toBe("prod");
-    expect(tags[0]!["flareon:lifecycle"]).toBeUndefined();
+    expect(tags[0]!["flarelet:stage"]).toBe("prod");
+    expect(tags[0]!["flarelet:lifecycle"]).toBeUndefined();
   });
 });
 
@@ -503,10 +503,10 @@ describe("PR preview (ephemeral)", () => {
 
   it("is a single self-contained stack", () => {
     expect(stage).toBeUndefined();
-    expect(version.stackName).toBe("flareon-myapp-preview-pr-123");
+    expect(version.stackName).toBe("flarelet-myapp-preview-pr-123");
     expect(version.tags.tagValues()).toMatchObject({
-      "flareon:stage": "preview",
-      "flareon:version": "pr-123",
+      "flarelet:stage": "preview",
+      "flarelet:version": "pr-123",
     });
   });
 
@@ -529,9 +529,9 @@ describe("PR preview (ephemeral)", () => {
       Handler: "index.handler",
       Environment: {
         Variables: Match.objectLike({
-          FLAREON_AUTH_MODE: "preview",
-          FLAREON_PREVIEW_TOKEN_SECRET_ARN: Match.anyValue(),
-          FLAREON_SESSION_SECRET_ARN: Match.anyValue(),
+          FLARELET_AUTH_MODE: "preview",
+          FLARELET_PREVIEW_TOKEN_SECRET_ARN: Match.anyValue(),
+          FLARELET_SESSION_SECRET_ARN: Match.anyValue(),
         }),
       },
     });
@@ -542,7 +542,7 @@ describe("PR preview (ephemeral)", () => {
   it("scopes secrets by stage so previews share the preview stage path", () => {
     t.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
-        Variables: Match.objectLike({ FLAREON_SECRETS_PATH: "/flareon/myapp/preview/secrets/" }),
+        Variables: Match.objectLike({ FLARELET_SECRETS_PATH: "/flarelet/myapp/preview/secrets/" }),
       },
     });
   });

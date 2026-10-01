@@ -45,14 +45,14 @@ describe("devVersion", () => {
 describe("bindings", () => {
   it("lists the app's bindings with their environment variable names", () => {
     expect(bindingEntries(ir(FULL))).toEqual([
-      { label: "database.main", env: "FLAREON_DATABASE_MAIN_TABLE", stateful: true },
+      { label: "database.main", env: "FLARELET_DATABASE_MAIN_TABLE", stateful: true },
       {
         label: "database.user-sessions",
-        env: "FLAREON_DATABASE_USER_SESSIONS_TABLE",
+        env: "FLARELET_DATABASE_USER_SESSIONS_TABLE",
         stateful: true,
       },
-      { label: "storage.files", env: "FLAREON_STORAGE_FILES_BUCKET", stateful: true },
-      { label: "ai.haiku", env: "FLAREON_AI_HAIKU_MODEL_ID", stateful: false },
+      { label: "storage.files", env: "FLARELET_STORAGE_FILES_BUCKET", stateful: true },
+      { label: "ai.haiku", env: "FLARELET_AI_HAIKU_MODEL_ID", stateful: false },
     ]);
   });
 
@@ -61,16 +61,16 @@ describe("bindings", () => {
       pickBindingEnv({
         AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
         PORT: "8080",
-        FLAREON_APP: "myapp",
-        FLAREON_SECRETS_PATH: "/x/",
-        FLAREON_DATABASE_MAIN_TABLE: "t",
-        FLAREON_STORAGE_FILES_BUCKET: "b",
-        FLAREON_AI_HAIKU_MODEL_ID: "m",
+        FLARELET_APP: "myapp",
+        FLARELET_SECRETS_PATH: "/x/",
+        FLARELET_DATABASE_MAIN_TABLE: "t",
+        FLARELET_STORAGE_FILES_BUCKET: "b",
+        FLARELET_AI_HAIKU_MODEL_ID: "m",
       }),
     ).toEqual({
-      FLAREON_DATABASE_MAIN_TABLE: "t",
-      FLAREON_STORAGE_FILES_BUCKET: "b",
-      FLAREON_AI_HAIKU_MODEL_ID: "m",
+      FLARELET_DATABASE_MAIN_TABLE: "t",
+      FLARELET_STORAGE_FILES_BUCKET: "b",
+      FLARELET_AI_HAIKU_MODEL_ID: "m",
     });
   });
 });
@@ -80,8 +80,8 @@ describe("buildDevApp", () => {
 
   it("creates one stack with only the stateful bindings, deleted with the stack", () => {
     const { app, stack } = buildDevApp({ ir: ir(FULL), deployment: d, region: "ap-northeast-1" });
-    expect(stack.stackName).toBe("flareon-myapp-preview-local-naoto");
-    expect(app.node.children.filter((c) => c.node.id.startsWith("flareon-"))).toHaveLength(1);
+    expect(stack.stackName).toBe("flarelet-myapp-preview-local-naoto");
+    expect(app.node.children.filter((c) => c.node.id.startsWith("flarelet-"))).toHaveLength(1);
     const t = Template.fromStack(stack);
     t.resourceCountIs("AWS::DynamoDB::Table", 2);
     t.resourceCountIs("AWS::S3::Bucket", 1);
@@ -103,9 +103,9 @@ describe("buildDevApp", () => {
     expect(Object.keys(out)).toHaveLength(1);
     const json = JSON.stringify(out);
     for (const k of [
-      "FLAREON_DATABASE_MAIN_TABLE",
-      "FLAREON_DATABASE_USER_SESSIONS_TABLE",
-      "FLAREON_STORAGE_FILES_BUCKET",
+      "FLARELET_DATABASE_MAIN_TABLE",
+      "FLARELET_DATABASE_USER_SESSIONS_TABLE",
+      "FLARELET_STORAGE_FILES_BUCKET",
     ]) {
       expect(json).toContain(k);
     }
@@ -113,10 +113,10 @@ describe("buildDevApp", () => {
       (stack.tags.renderTags() as { Key: string; Value: string }[]).map((x) => [x.Key, x.Value]),
     );
     expect(tags).toMatchObject({
-      "flareon:app": "myapp",
-      "flareon:stage": "preview",
-      "flareon:version": "local-naoto",
-      "flareon:lifecycle": "dev",
+      "flarelet:app": "myapp",
+      "flarelet:stage": "preview",
+      "flarelet:version": "local-naoto",
+      "flarelet:lifecycle": "dev",
     });
   });
 });

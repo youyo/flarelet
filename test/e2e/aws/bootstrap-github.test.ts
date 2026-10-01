@@ -1,4 +1,4 @@
-// flareon bootstrap github: テスト用リポジトリ名でロールを作成 → 信頼ポリシーと権限を検証 → 削除。
+// flarelet bootstrap github: テスト用リポジトリ名でロールを作成 → 信頼ポリシーと権限を検証 → 削除。
 // アカウントに既存の GitHub OIDC プロバイダ（他用途）は作り直さない・消さない・変更しない。
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -65,14 +65,14 @@ async function providerSnapshot() {
 }
 
 describe.runIf(ENABLED)("real AWS: bootstrap github", () => {
-  const slug = `flareon-e2e/r${randomBytes(3).toString("hex")}`;
+  const slug = `flarelet-e2e/r${randomBytes(3).toString("hex")}`;
   const repo = parseRepo(slug);
   const stack = roleStackName(repo);
   let dir: string;
   let before: Awaited<ReturnType<typeof providerSnapshot>>;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "flareon-bs-e2e-"));
+    dir = await mkdtemp(join(tmpdir(), "flarelet-bs-e2e-"));
     before = await providerSnapshot();
     log(`OIDC provider before: ${before ? before.arn : "none"}`);
   });
@@ -101,11 +101,11 @@ describe.runIf(ENABLED)("real AWS: bootstrap github", () => {
       const arn = /Role ARN: (\S+)/.exec(r.stdout)?.[1];
       expect(arn).toBeDefined();
       expect(r.stdout).toContain(
-        `gh variable set FLAREON_AWS_ROLE_ARN --repo ${slug} --body ${arn}`,
+        `gh variable set FLARELET_AWS_ROLE_ARN --repo ${slug} --body ${arn}`,
       );
       if (before) {
         expect(r.stdout).toContain("reusing");
-        // 既存プロバイダがある場合、Flareon のプロバイダスタックは作られない
+        // 既存プロバイダがある場合、Flarelet のプロバイダスタックは作られない
         expect(await stackOutputs(PROVIDER_STACK)).toBeUndefined();
       }
 
@@ -137,50 +137,52 @@ describe.runIf(ENABLED)("real AWS: bootstrap github", () => {
       expect(actions).toContain("sts:AssumeRole");
       log(`role policy actions: ${actions.join(", ")}`);
 
-      // 実際の評価（IAM ポリシーシミュレータ）: PR preview のシークレット・スタック・Flareon のロググループだけ
+      // 実際の評価（IAM ポリシーシミュレータ）: PR preview のシークレット・スタック・Flarelet のロググループだけ
       const acct = arn!.split(":")[4]!;
       const secret = `arn:aws:secretsmanager:${REGION}:${acct}:secret:SessionSecretX-AbCdEf`;
       const sm = "secretsmanager:GetSecretValue";
       expect(
         await decide(arn!, sm, secret, {
-          "flareon:stage": "preview",
-          "flareon:lifecycle": "ephemeral",
+          "flarelet:stage": "preview",
+          "flarelet:lifecycle": "ephemeral",
         }),
       ).toBe("allowed");
       // 永続 stage の Cookie 署名鍵（prod、preview/current）は読めない
-      expect(await decide(arn!, sm, secret, { "flareon:stage": "prod" })).not.toBe("allowed");
-      expect(await decide(arn!, sm, secret, { "flareon:stage": "preview" })).not.toBe("allowed");
-      expect(await decide(arn!, sm, secret, { "flareon:app": "x" })).not.toBe("allowed");
-      // deploy が外部 IdP の資格情報の有無を確認する DescribeSecret は flareon/<app>/<stage>/auth/* だけ（値は読めない）
+      expect(await decide(arn!, sm, secret, { "flarelet:stage": "prod" })).not.toBe("allowed");
+      expect(await decide(arn!, sm, secret, { "flarelet:stage": "preview" })).not.toBe("allowed");
+      expect(await decide(arn!, sm, secret, { "flarelet:app": "x" })).not.toBe("allowed");
+      // deploy が外部 IdP の資格情報の有無を確認する DescribeSecret は flarelet/<app>/<stage>/auth/* だけ（値は読めない）
       const smArn = (n: string) => `arn:aws:secretsmanager:${REGION}:${acct}:secret:${n}`;
       const ds = "secretsmanager:DescribeSecret";
-      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf"))).toBe(
+      expect(
+        await decide(arn!, ds, smArn("flarelet/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf")),
+      ).toBe("allowed");
+      expect(await decide(arn!, ds, smArn("flarelet/myapp/prod/auth/ENTRA_CLIENT_SECRET"))).toBe(
         "allowed",
       );
-      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/auth/ENTRA_CLIENT_SECRET"))).toBe(
-        "allowed",
-      );
-      expect(await decide(arn!, ds, smArn("flareon/myapp/prod/secrets/X-AbCdEf"))).not.toBe(
+      expect(await decide(arn!, ds, smArn("flarelet/myapp/prod/secrets/X-AbCdEf"))).not.toBe(
         "allowed",
       );
       expect(await decide(arn!, ds, smArn("other/myapp/prod/auth/X-AbCdEf"))).not.toBe("allowed");
       expect(
-        await decide(arn!, sm, smArn("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf")),
+        await decide(arn!, sm, smArn("flarelet/myapp/prod/auth/GOOGLE_CLIENT_ID-AbCdEf")),
       ).not.toBe("allowed");
       const stackArn = (n: string) =>
         `arn:aws:cloudformation:${REGION}:${acct}:stack/${n}/00000000-0000-0000-0000-000000000000`;
       const delStack = "cloudformation:DeleteStack";
-      expect(await decide(arn!, delStack, stackArn("flareon-myapp-preview-pr-12"))).toBe("allowed");
-      expect(await decide(arn!, delStack, stackArn("flareon-myapp-prod-current"))).not.toBe(
+      expect(await decide(arn!, delStack, stackArn("flarelet-myapp-preview-pr-12"))).toBe(
         "allowed",
       );
-      expect(await decide(arn!, delStack, stackArn("flareon-myapp-prod"))).not.toBe("allowed");
-      expect(await decide(arn!, delStack, stackArn("flareon-myapp-preview-current"))).not.toBe(
+      expect(await decide(arn!, delStack, stackArn("flarelet-myapp-prod-current"))).not.toBe(
+        "allowed",
+      );
+      expect(await decide(arn!, delStack, stackArn("flarelet-myapp-prod"))).not.toBe("allowed");
+      expect(await decide(arn!, delStack, stackArn("flarelet-myapp-preview-current"))).not.toBe(
         "allowed",
       );
       expect(await decide(arn!, delStack, stackArn(stack))).not.toBe("allowed");
       const group = (n: string) => `arn:aws:logs:${REGION}:${acct}:log-group:${n}`;
-      const lg = "flareon-myapp-prod-current-AppLogsABC-xyz";
+      const lg = "flarelet-myapp-prod-current-AppLogsABC-xyz";
       expect(await decide(arn!, "logs:StartLiveTail", group(lg))).toBe("allowed");
       expect(await decide(arn!, "logs:FilterLogEvents", `${group(lg)}:*`)).toBe("allowed");
       expect(await decide(arn!, "logs:StartLiveTail", group("/aws/lambda/other"))).not.toBe(

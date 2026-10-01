@@ -21,7 +21,7 @@ export function renderWorkflow(
   return workflowTemplate({ runtime, branches: workflowBranches(git, defaultBranch) });
 }
 
-/** flareon.yaml の git 設定から .github/workflows/flareon.yml を（再）生成する。 */
+/** flarelet.yaml の git 設定から .github/workflows/flarelet.yml を（再）生成する。 */
 export async function runWorkflowGenerate(args: WorkflowGenerateArgs, io: Io): Promise<number> {
   const ir = await loadIR(args.file, io);
   if (!ir) return 1;
@@ -35,7 +35,7 @@ export async function runWorkflowGenerate(args: WorkflowGenerateArgs, io: Io): P
     }
     if (!args.force) {
       io.stderr(
-        `Error: ${WORKFLOW_PATH} differs from what the current flareon.yaml would generate; ` +
+        `Error: ${WORKFLOW_PATH} differs from what the current flarelet.yaml would generate; ` +
           `it was not changed. Use --force to overwrite it (local edits are lost).`,
       );
       return 1;

@@ -3,15 +3,15 @@ import { bindings, identity, bindingEnvName } from "../../src/runtime/index.js";
 
 describe("runtime bindings", () => {
   it("maps names to env var names", () => {
-    expect(bindingEnvName("DATABASE", "main", "TABLE")).toBe("FLAREON_DATABASE_MAIN_TABLE");
-    expect(bindingEnvName("AI", "nova-micro", "MODEL_ID")).toBe("FLAREON_AI_NOVA_MICRO_MODEL_ID");
+    expect(bindingEnvName("DATABASE", "main", "TABLE")).toBe("FLARELET_DATABASE_MAIN_TABLE");
+    expect(bindingEnvName("AI", "nova-micro", "MODEL_ID")).toBe("FLARELET_AI_NOVA_MICRO_MODEL_ID");
   });
 
   it("reads database/storage/ai from env", () => {
     const env = {
-      FLAREON_DATABASE_MAIN_TABLE: "t1",
-      FLAREON_STORAGE_FILES_BUCKET: "b1",
-      FLAREON_AI_NOVA_MICRO_MODEL_ID: "us.amazon.nova-micro-v1:0",
+      FLARELET_DATABASE_MAIN_TABLE: "t1",
+      FLARELET_STORAGE_FILES_BUCKET: "b1",
+      FLARELET_AI_NOVA_MICRO_MODEL_ID: "us.amazon.nova-micro-v1:0",
     };
     expect(bindings.database("main", env)).toEqual({ tableName: "t1" });
     expect(bindings.storage("files", env)).toEqual({ bucketName: "b1" });
@@ -20,15 +20,15 @@ describe("runtime bindings", () => {
 
   it("throws a helpful error when a binding is missing", () => {
     expect(() => bindings.database("main", {})).toThrow(
-      /database "main".*FLAREON_DATABASE_MAIN_TABLE/,
+      /database "main".*FLARELET_DATABASE_MAIN_TABLE/,
     );
   });
 
-  it("extracts identity from x-flareon headers (case-insensitive, plain object or Headers)", () => {
+  it("extracts identity from x-flarelet headers (case-insensitive, plain object or Headers)", () => {
     const h = {
-      "X-Flareon-User-Sub": "abc",
-      "x-flareon-user-email": "a@example.com",
-      "x-flareon-auth-mode": "cognito",
+      "X-Flarelet-User-Sub": "abc",
+      "x-flarelet-user-email": "a@example.com",
+      "x-flarelet-auth-mode": "cognito",
     };
     expect(identity(h)).toEqual({
       sub: "abc",
@@ -36,7 +36,7 @@ describe("runtime bindings", () => {
       emailVerified: false,
       authMode: "cognito",
     });
-    expect(identity(new Headers({ "x-flareon-user-sub": "z" }))).toEqual({
+    expect(identity(new Headers({ "x-flarelet-user-sub": "z" }))).toEqual({
       sub: "z",
       email: undefined,
       emailVerified: false,
@@ -46,71 +46,71 @@ describe("runtime bindings", () => {
 
   it("returns null when there is no authenticated user", () => {
     expect(identity({})).toBeNull();
-    expect(identity({ "x-flareon-auth-mode": "cognito" })).toBeNull();
+    expect(identity({ "x-flarelet-auth-mode": "cognito" })).toBeNull();
   });
 
-  it("never trusts x-flareon-* headers when the app is public (FLAREON_AUTH_ENABLED=false)", () => {
+  it("never trusts x-flarelet-* headers when the app is public (FLARELET_AUTH_ENABLED=false)", () => {
     // auth: false では front auth Lambda が無く、クライアントが送ったヘッダがそのまま届くため
-    const forged = { "x-flareon-user-sub": "admin", "x-flareon-user-email": "admin@example.com" };
-    expect(identity(forged, { FLAREON_AUTH_ENABLED: "false" })).toBeNull();
-    expect(identity(forged, { FLAREON_AUTH_ENABLED: "true" })).toMatchObject({ sub: "admin" });
+    const forged = { "x-flarelet-user-sub": "admin", "x-flarelet-user-email": "admin@example.com" };
+    expect(identity(forged, { FLARELET_AUTH_ENABLED: "false" })).toBeNull();
+    expect(identity(forged, { FLARELET_AUTH_ENABLED: "true" })).toMatchObject({ sub: "admin" });
     expect(identity(forged, {})).toMatchObject({ sub: "admin" });
   });
 
-  it("reads FLAREON_AUTH_ENABLED from process.env by default", () => {
-    const prev = process.env.FLAREON_AUTH_ENABLED;
-    process.env.FLAREON_AUTH_ENABLED = "false";
+  it("reads FLARELET_AUTH_ENABLED from process.env by default", () => {
+    const prev = process.env.FLARELET_AUTH_ENABLED;
+    process.env.FLARELET_AUTH_ENABLED = "false";
     try {
-      expect(identity({ "x-flareon-user-sub": "admin" })).toBeNull();
+      expect(identity({ "x-flarelet-user-sub": "admin" })).toBeNull();
     } finally {
-      if (prev === undefined) delete process.env.FLAREON_AUTH_ENABLED;
-      else process.env.FLAREON_AUTH_ENABLED = prev;
+      if (prev === undefined) delete process.env.FLARELET_AUTH_ENABLED;
+      else process.env.FLARELET_AUTH_ENABLED = prev;
     }
   });
 });
 
 describe("identity(): email verification (F1)", () => {
   it("exposes emailVerified only when the front auth says the email is verified", () => {
-    const base = { "x-flareon-user-sub": "abc", "x-flareon-user-email": "a@example.com" };
-    expect(identity({ ...base, "x-flareon-user-email-verified": "true" }, {})).toMatchObject({
+    const base = { "x-flarelet-user-sub": "abc", "x-flarelet-user-email": "a@example.com" };
+    expect(identity({ ...base, "x-flarelet-user-email-verified": "true" }, {})).toMatchObject({
       email: "a@example.com",
       emailVerified: true,
     });
-    expect(identity({ ...base, "x-flareon-user-email-verified": "false" }, {})).toMatchObject({
+    expect(identity({ ...base, "x-flarelet-user-email-verified": "false" }, {})).toMatchObject({
       emailVerified: false,
     });
-    expect(identity({ ...base, "x-flareon-user-email-verified": "TRUE " }, {})).toMatchObject({
+    expect(identity({ ...base, "x-flarelet-user-email-verified": "TRUE " }, {})).toMatchObject({
       emailVerified: false,
     });
     expect(identity(base, {})).toMatchObject({ emailVerified: false });
   });
 });
 
-describe("identity(): flareon dev secret (F2)", () => {
+describe("identity(): flarelet dev secret (F2)", () => {
   const forged = {
-    "x-flareon-user-sub": "dev:admin@example.com",
-    "x-flareon-user-email": "admin@example.com",
+    "x-flarelet-user-sub": "dev:admin@example.com",
+    "x-flarelet-user-email": "admin@example.com",
   };
-  const env = { FLAREON_AUTH_ENABLED: "true", FLAREON_DEV_SECRET: "s3cret-value" };
+  const env = { FLARELET_AUTH_ENABLED: "true", FLARELET_DEV_SECRET: "s3cret-value" };
 
-  it("under flareon dev, ignores identity headers that did not come through the dev proxy", () => {
+  it("under flarelet dev, ignores identity headers that did not come through the dev proxy", () => {
     // アプリに直接届いたリクエスト（プロキシを経由しない）には秘密ヘッダが無い
     expect(identity(forged, env)).toBeNull();
-    expect(identity({ ...forged, "x-flareon-dev-secret": "wrong" }, env)).toBeNull();
-    expect(identity({ ...forged, "x-flareon-dev-secret": "s3cret-valu" }, env)).toBeNull();
+    expect(identity({ ...forged, "x-flarelet-dev-secret": "wrong" }, env)).toBeNull();
+    expect(identity({ ...forged, "x-flarelet-dev-secret": "s3cret-valu" }, env)).toBeNull();
   });
 
   it("accepts identity headers that carry the per-session dev secret", () => {
-    expect(identity({ ...forged, "x-flareon-dev-secret": "s3cret-value" }, env)).toMatchObject({
+    expect(identity({ ...forged, "x-flarelet-dev-secret": "s3cret-value" }, env)).toMatchObject({
       sub: "dev:admin@example.com",
     });
     expect(
-      identity(new Headers({ ...forged, "x-flareon-dev-secret": "s3cret-value" }), env),
+      identity(new Headers({ ...forged, "x-flarelet-dev-secret": "s3cret-value" }), env),
     ).toMatchObject({ sub: "dev:admin@example.com" });
   });
 
-  it("does not require the secret when FLAREON_DEV_SECRET is unset (Lambda)", () => {
-    expect(identity(forged, { FLAREON_AUTH_ENABLED: "true" })).toMatchObject({
+  it("does not require the secret when FLARELET_DEV_SECRET is unset (Lambda)", () => {
+    expect(identity(forged, { FLARELET_AUTH_ENABLED: "true" })).toMatchObject({
       sub: "dev:admin@example.com",
     });
   });

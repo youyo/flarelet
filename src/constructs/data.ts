@@ -3,7 +3,7 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import type { FlareonIR } from "../ir/index.js";
+import type { FlareletIR } from "../ir/index.js";
 
 export type Lifetime = "retain" | "destroy";
 
@@ -15,7 +15,7 @@ export class Data extends Construct {
   readonly tables: Record<string, dynamodb.Table> = {};
   readonly buckets: Record<string, s3.Bucket> = {};
 
-  constructor(scope: Construct, id: string, props: { ir: FlareonIR; lifetime: Lifetime }) {
+  constructor(scope: Construct, id: string, props: { ir: FlareletIR; lifetime: Lifetime }) {
     super(scope, id);
     const removalPolicy = removalOf(props.lifetime);
     for (const { name } of props.ir.databases) {

@@ -20,7 +20,7 @@ import {
 type Deps = Awaited<ReturnType<typeof makeDeps>>;
 
 async function signIn(deps: Deps, handler: ReturnType<typeof createHandler>): Promise<string> {
-  const login = await handler(makeEvent({ rawPath: "/__flareon/auth/login" }));
+  const login = await handler(makeEvent({ rawPath: "/__flarelet/auth/login" }));
   const loc = new URL(login.headers!.location!);
   const idToken = await deps.signIdToken({
     sub: "u1",
@@ -31,7 +31,7 @@ async function signIn(deps: Deps, handler: ReturnType<typeof createHandler>): Pr
   deps.setFetch(async () => new Response(JSON.stringify({ id_token: idToken }), { status: 200 }));
   const cb = await handler(
     makeEvent({
-      rawPath: "/__flareon/auth/callback",
+      rawPath: "/__flarelet/auth/callback",
       rawQueryString: `code=C&state=${loc.searchParams.get("state")}`,
       cookies: [`${FLOW_COOKIE}=${cookieValue(login.cookies, FLOW_COOKIE)!}`],
     }),
@@ -79,7 +79,7 @@ describe("session epoch (cognito)", () => {
     expect((await handler(api(session))).statusCode).toBe(401);
     const nav = await handler(page(session));
     expect(nav.statusCode).toBe(302);
-    expect(nav.headers!.location).toMatch(/^\/__flareon\/auth\/login/);
+    expect(nav.headers!.location).toMatch(/^\/__flarelet\/auth\/login/);
     // 失効前の 2 回だけがアプリに届く
     expect(deps.invocations).toHaveLength(2);
   });
@@ -124,7 +124,7 @@ describe("session epoch (preview)", () => {
     deps.setEpoch(3);
     const handler = createHandler(PREVIEW_ENV, deps);
     const login = await handler(
-      makeEvent({ rawPath: "/__flareon/auth/preview", rawQueryString: `token=${PREVIEW_TOKEN}` }),
+      makeEvent({ rawPath: "/__flarelet/auth/preview", rawQueryString: `token=${PREVIEW_TOKEN}` }),
     );
     const session = cookieValue(login.cookies, SESSION_COOKIE)!;
     expect(verifyPayload(session, SESSION_KEY, NOW)!["se"]).toBe(3);
@@ -135,14 +135,14 @@ describe("session epoch (preview)", () => {
   });
 });
 
-describe("FLAREON_SESSION_EPOCH_PARAM", () => {
+describe("FLARELET_SESSION_EPOCH_PARAM", () => {
   it("is required in both modes", () => {
     expect(parseAuthConfig(COGNITO_ENV).sessionEpochParam).toBe(EPOCH_PARAM);
     const without = (env: Record<string, string>) =>
-      Object.fromEntries(Object.entries(env).filter(([k]) => k !== "FLAREON_SESSION_EPOCH_PARAM"));
+      Object.fromEntries(Object.entries(env).filter(([k]) => k !== "FLARELET_SESSION_EPOCH_PARAM"));
     const cognito = without(COGNITO_ENV);
     const preview = without(PREVIEW_ENV);
-    expect(() => parseAuthConfig(cognito)).toThrow(/FLAREON_SESSION_EPOCH_PARAM/);
-    expect(() => parseAuthConfig(preview)).toThrow(/FLAREON_SESSION_EPOCH_PARAM/);
+    expect(() => parseAuthConfig(cognito)).toThrow(/FLARELET_SESSION_EPOCH_PARAM/);
+    expect(() => parseAuthConfig(preview)).toThrow(/FLARELET_SESSION_EPOCH_PARAM/);
   });
 });

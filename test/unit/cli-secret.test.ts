@@ -8,7 +8,7 @@ runtime: { language: python }
 http: true
 secrets: [API_KEY, OTHER_KEY]
 `;
-const PATH = "/flareon/myapp/prod/secrets/";
+const PATH = "/flarelet/myapp/prod/secrets/";
 
 let h: Harness;
 afterEach(async () => h?.cleanup());
@@ -21,8 +21,8 @@ async function withVersions() {
     ["preview", "current"],
   ] as const) {
     h.cloud.addStack({
-      name: `flareon-myapp-${stage}-${v}`,
-      tags: { "flareon:app": "myapp", "flareon:stage": stage, "flareon:version": v },
+      name: `flarelet-myapp-${stage}-${v}`,
+      tags: { "flarelet:app": "myapp", "flarelet:stage": stage, "flarelet:version": v },
       outputs: { AppFunctionName: `fn-${stage}-${v}` },
     });
   }
@@ -38,14 +38,14 @@ describe("secret set", () => {
       "updateFunctionEnv:fn-prod-v1",
       "updateFunctionEnv:fn-prod-v2",
     ]);
-    expect(h.cloud.functionEnv.get("fn-prod-v1")).toHaveProperty("FLAREON_SECRETS_REVISION");
+    expect(h.cloud.functionEnv.get("fn-prod-v1")).toHaveProperty("FLARELET_SECRETS_REVISION");
     const all = [...h.out, ...h.err].join("\n");
     expect(all).not.toContain("super-secret-value");
     expect(all).toContain("API_KEY");
     expect(all).toMatch(/v1, v2/);
   });
 
-  it("rejects names not declared in flareon.yaml", async () => {
+  it("rejects names not declared in flarelet.yaml", async () => {
     await withVersions();
     h.secretInput = "x";
     expect(await runSecretSet({ file: h.file, stage: "prod", name: "NOPE" }, h.deps)).toBe(1);

@@ -1,11 +1,11 @@
 {
-  "name": "flareon",
+  "name": "flarelet",
   "version": "0.0.0",
   "description": "Serverless application platform for AWS",
   "type": "module",
   "license": "UNLICENSED",
   "bin": {
-    "flareon": "./dist/cli/index.js"
+    "flarelet": "./dist/cli/index.js"
   },
   "exports": {
     ".": {

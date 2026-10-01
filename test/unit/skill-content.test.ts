@@ -12,10 +12,10 @@ import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { createProgram } from "../../src/cli/program.js";
 import { parseConfig } from "../../src/config/index.js";
-import { extractFlareonCommands, findCommandProblems } from "./skill-commands.js";
+import { extractFlareletCommands, findCommandProblems } from "./skill-commands.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const SKILL_DIR = join(ROOT, ".agents/skills/flareon");
+const SKILL_DIR = join(ROOT, ".agents/skills/flarelet");
 const SKILL_MD = join(SKILL_DIR, "SKILL.md");
 
 const read = (p: string) => readFileSync(p, "utf8");
@@ -37,16 +37,16 @@ function mdFiles(dir: string): string[] {
 }
 
 describe("skill layout", () => {
-  it("lives in .agents/skills/flareon with SKILL.md and references/", () => {
+  it("lives in .agents/skills/flarelet with SKILL.md and references/", () => {
     expect(existsSync(SKILL_MD)).toBe(true);
     expect(existsSync(join(SKILL_DIR, "references/cli.md"))).toBe(true);
-    expect(existsSync(join(SKILL_DIR, "references/flareon-yaml.md"))).toBe(true);
+    expect(existsSync(join(SKILL_DIR, "references/flarelet-yaml.md"))).toBe(true);
   });
 
-  it(".claude/skills/flareon is a relative symlink to the real skill", () => {
-    const link = join(ROOT, ".claude/skills/flareon");
+  it(".claude/skills/flarelet is a relative symlink to the real skill", () => {
+    const link = join(ROOT, ".claude/skills/flarelet");
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(link)).toBe("../../.agents/skills/flareon");
+    expect(readlinkSync(link)).toBe("../../.agents/skills/flarelet");
     expect(realpathSync(join(link, "SKILL.md"))).toBe(realpathSync(SKILL_MD));
   });
 });
@@ -63,7 +63,7 @@ describe("SKILL.md frontmatter", () => {
   const fm = () => frontmatter(read(SKILL_MD));
 
   it("has name matching the directory name", () => {
-    expect(fm().name).toBe("flareon");
+    expect(fm().name).toBe("flarelet");
   });
 
   it("has a concrete description with trigger words", () => {
@@ -72,7 +72,7 @@ describe("SKILL.md frontmatter", () => {
     const s = d as string;
     expect(s.length).toBeGreaterThan(80);
     expect(s.length).toBeLessThanOrEqual(1024);
-    for (const w of ["flareon", "flareon.yaml", "preview environment"]) {
+    for (const w of ["flarelet", "flarelet.yaml", "preview environment"]) {
       expect(s.toLowerCase()).toContain(w);
     }
   });
@@ -93,19 +93,19 @@ describe("markdown links", () => {
   it("SKILL.md links to both references", () => {
     const md = read(SKILL_MD);
     expect(md).toContain("references/cli.md");
-    expect(md).toContain("references/flareon-yaml.md");
+    expect(md).toContain("references/flarelet-yaml.md");
   });
 });
 
 describe("drift: commands in the skill exist in the CLI", () => {
   const program = createProgram();
 
-  it("every flareon command and option written in the skill exists", () => {
+  it("every flarelet command and option written in the skill exists", () => {
     for (const file of mdFiles(SKILL_DIR)) {
-      const cmds = extractFlareonCommands(read(file));
+      const cmds = extractFlareletCommands(read(file));
       expect(cmds.length, file).toBeGreaterThan(0);
       for (const c of cmds) {
-        expect(findCommandProblems(program, c), `${file}: flareon ${c}`).toEqual([]);
+        expect(findCommandProblems(program, c), `${file}: flarelet ${c}`).toEqual([]);
       }
     }
   });
@@ -116,7 +116,7 @@ describe("drift: commands in the skill exist in the CLI", () => {
       for (const sub of cmd.commands) {
         const p = [...path, sub.name()];
         if (sub.commands.length === 0) {
-          expect(cli, `command ${p.join(" ")}`).toContain(`flareon ${p.join(" ")}`);
+          expect(cli, `command ${p.join(" ")}`).toContain(`flarelet ${p.join(" ")}`);
           for (const o of sub.options) {
             if (o.long) expect(cli, `${p.join(" ")} ${o.long}`).toContain(o.long);
           }
@@ -128,9 +128,9 @@ describe("drift: commands in the skill exist in the CLI", () => {
   });
 });
 
-describe("drift: flareon-yaml.md examples", () => {
+describe("drift: flarelet-yaml.md examples", () => {
   it("all yaml examples that declare `version: 1` pass the real schema", () => {
-    const md = read(join(SKILL_DIR, "references/flareon-yaml.md"));
+    const md = read(join(SKILL_DIR, "references/flarelet-yaml.md"));
     const blocks = [...md.matchAll(/```yaml\n([\s\S]*?)```/g)].map((m) => m[1] ?? "");
     const full = blocks.filter((b) => /^version: 1/m.test(b));
     expect(full.length).toBeGreaterThanOrEqual(3);

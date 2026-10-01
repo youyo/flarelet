@@ -11,7 +11,7 @@ import {
   SESSION_KEY,
 } from "./auth-fixtures.js";
 
-const P = "/__flareon/auth/preview";
+const P = "/__flarelet/auth/preview";
 
 describe("preview auth", () => {
   it("正しいトークンの GET でセッション発行し / へ 302", async () => {
@@ -94,7 +94,7 @@ describe("preview auth", () => {
     const res = await createHandler(
       PREVIEW_ENV,
       deps,
-    )(makeEvent({ rawPath: "/__flareon/auth/logout" }));
+    )(makeEvent({ rawPath: "/__flarelet/auth/logout" }));
     expect(res.statusCode).toBe(302);
     expect(res.headers!.location).toBe("/");
     expect(res.cookies!.some((c) => c.startsWith(`${SESSION_COOKIE}=;`))).toBe(true);

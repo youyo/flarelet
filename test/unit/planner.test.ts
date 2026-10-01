@@ -23,7 +23,7 @@ describe("plan", () => {
   it("lists everything as new when nothing exists", () => {
     const p = buildPlan(full, { stage: "prod", version: "v2", lifecycle: "persistent" });
     expect(p.changes).toBe(p.items.length);
-    expect(renderPlan(p)).toBe(`Flareon will create myapp (prod/v2)
+    expect(renderPlan(p)).toBe(`Flarelet will create myapp (prod/v2)
 
   + application version v2
   + database.main
@@ -35,7 +35,7 @@ describe("plan", () => {
 6 changes
 
 Deploy with:
-  flareon deploy --stage prod --version v2
+  flarelet deploy --stage prod --version v2
 `);
   });
 
@@ -46,7 +46,7 @@ Deploy with:
       new Set(["database.main", "storage.files", "authentication"]),
     );
     const out = renderPlan(p);
-    expect(out).toContain("Flareon will update myapp (prod/v2)");
+    expect(out).toContain("Flarelet will update myapp (prod/v2)");
     expect(out).toContain("  = database.main");
     expect(out).toContain("  + application version v2");
     expect(out).toContain("3 changes");
@@ -84,14 +84,14 @@ Deploy with:
 describe("plan against deployed state", () => {
   const d = { stage: "prod", version: "v2", lifecycle: "persistent" } as const;
 
-  it("shows + / ~ / = / - in Flareon terms", () => {
+  it("shows + / ~ / = / - in Flarelet terms", () => {
     const p = buildPlan(full, d, {
       existing: new Set(["application", "database.main", "storage.files", "authentication"]),
       changed: new Set(["application", "storage.files"]),
       removed: new Set(["database.legacy", "ai.nova-micro"]),
     });
     const out = renderPlan(p);
-    expect(out).toContain("Flareon will update myapp (prod/v2)");
+    expect(out).toContain("Flarelet will update myapp (prod/v2)");
     expect(out).toContain("  ~ application version v2");
     expect(out).toContain("  = database.main");
     expect(out).toContain("  ~ storage.files");

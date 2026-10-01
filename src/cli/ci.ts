@@ -18,12 +18,12 @@ export async function ciPreflight(
   }
   const closedPr = ci.event.startsWith("pull_request") && ci.action === "closed";
   if (command === "deploy" && closedPr) {
-    io.stdout("Pull request is closed; nothing to deploy (run flareon destroy --ci to remove it)");
+    io.stdout("Pull request is closed; nothing to deploy (run flarelet destroy --ci to remove it)");
     return 0;
   }
   if (command === "destroy" && !closedPr) {
     io.stderr(
-      `Error: flareon destroy --ci only runs for a closed pull request (event: ${ci.event}${ci.action ? `/${ci.action}` : ""})`,
+      `Error: flarelet destroy --ci only runs for a closed pull request (event: ${ci.event}${ci.action ? `/${ci.action}` : ""})`,
     );
     return 1;
   }

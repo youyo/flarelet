@@ -2,4 +2,4 @@
 export type BindingKind = "DATABASE" | "STORAGE" | "AI";
 
 export const bindingEnvName = (kind: BindingKind, name: string, suffix: string): string =>
-  `FLAREON_${kind}_${name.toUpperCase().replace(/-/g, "_")}_${suffix}`;
+  `FLARELET_${kind}_${name.toUpperCase().replace(/-/g, "_")}_${suffix}`;

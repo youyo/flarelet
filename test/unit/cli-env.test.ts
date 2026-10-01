@@ -12,41 +12,41 @@ let h: Harness;
 afterEach(async () => h?.cleanup());
 
 const vtags = (stage: string, version: string, lifecycle: string, branch?: string) => ({
-  "flareon:app": "myapp",
-  "flareon:stage": stage,
-  "flareon:version": version,
-  "flareon:lifecycle": lifecycle,
-  ...(branch ? { "flareon:branch": branch } : {}),
+  "flarelet:app": "myapp",
+  "flarelet:stage": stage,
+  "flarelet:version": version,
+  "flarelet:lifecycle": lifecycle,
+  ...(branch ? { "flarelet:branch": branch } : {}),
 });
 
 describe("env list", () => {
   it("lists versions with type, branch, status and URL", async () => {
     h = await harness(YAML);
     h.cloud.addStack({
-      name: "flareon-myapp-prod",
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod" },
+      name: "flarelet-myapp-prod",
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod" },
     });
     h.cloud.addStack({
-      name: "flareon-myapp-prod-v1",
+      name: "flarelet-myapp-prod-v1",
       tags: vtags("prod", "v1", "persistent", "release/v1"),
       outputs: { ApiUrl: "https://v1.example" },
     });
     h.cloud.addStack({
-      name: "flareon-myapp-preview-pr-12",
+      name: "flarelet-myapp-preview-pr-12",
       status: "UPDATE_IN_PROGRESS",
       tags: vtags("preview", "pr-12", "ephemeral"),
       outputs: { ApiUrl: "https://pr12.example" },
     });
     h.cloud.addStack({
-      name: "flareon-myapp-preview-pr-13",
+      name: "flarelet-myapp-preview-pr-13",
       status: "ROLLBACK_COMPLETE",
       // 古いスタック（lifecycle タグ無し）は version 名から推定する
-      tags: { "flareon:app": "myapp", "flareon:stage": "preview", "flareon:version": "pr-13" },
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "preview", "flarelet:version": "pr-13" },
     });
     h.cloud.addStack({
-      name: "flareon-myapp-prod-pr-5",
+      name: "flarelet-myapp-prod-pr-5",
       // lifecycle タグ無しでも prod/pr-5（release/pr-5 由来など）は persistent
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod", "flareon:version": "pr-5" },
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod", "flarelet:version": "pr-5" },
     });
     expect(await runEnvList({ file: h.file }, h.deps)).toBe(0);
     const lines = h.out.join("\n").split("\n");
@@ -71,7 +71,7 @@ describe("env url", () => {
   it("prints the URL of the resolved version", async () => {
     h = await harness(YAML);
     h.cloud.addStack({
-      name: "flareon-myapp-prod-v1",
+      name: "flarelet-myapp-prod-v1",
       outputs: { ApiUrl: "https://v1.example" },
     });
     expect(await runEnvUrl({ file: h.file, stage: "prod", version: "v1" }, h.deps)).toBe(0);
@@ -81,19 +81,19 @@ describe("env url", () => {
   it("prints a preview magic link with --with-token", async () => {
     h = await harness(YAML);
     h.cloud.addStack({
-      name: "flareon-myapp-preview-pr-4",
+      name: "flarelet-myapp-preview-pr-4",
       outputs: { ApiUrl: "https://pr4.example", PreviewTokenSecretArn: "arn:tok" },
     });
     h.cloud.secrets.set("arn:tok", "s3cr3t/+=\n");
     expect(await runEnvUrl({ file: h.file, pr: 4, withToken: true }, h.deps)).toBe(0);
     expect(h.out).toEqual([
-      `https://pr4.example/__flareon/auth/preview?token=${encodeURIComponent("s3cr3t/+=")}`,
+      `https://pr4.example/__flarelet/auth/preview?token=${encodeURIComponent("s3cr3t/+=")}`,
     ]);
   });
 
   it("rejects --with-token for non-preview environments", async () => {
     h = await harness(YAML);
-    h.cloud.addStack({ name: "flareon-myapp-prod-v1", outputs: { ApiUrl: "https://v1" } });
+    h.cloud.addStack({ name: "flarelet-myapp-prod-v1", outputs: { ApiUrl: "https://v1" } });
     expect(
       await runEnvUrl({ file: h.file, stage: "prod", version: "v1", withToken: true }, h.deps),
     ).toBe(1);

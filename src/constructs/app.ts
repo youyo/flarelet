@@ -20,7 +20,7 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 import { join } from "node:path";
 import type { Construct } from "constructs";
 import { idpSecretNames } from "../config/names.js";
-import { effectiveAuth, type FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareletIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 import { resolveModel, type ResolvedModel } from "./ai-models.js";
@@ -55,7 +55,7 @@ const NODE_RUNTIMES: Record<string, lambda.Runtime> = {
   "24": lambda.Runtime.NODEJS_24_X,
 };
 
-function lambdaRuntime(ir: FlareonIR): lambda.Runtime {
+function lambdaRuntime(ir: FlareletIR): lambda.Runtime {
   const table = ir.runtime.language === "python" ? PYTHON_RUNTIMES : NODE_RUNTIMES;
   const rt = table[ir.runtime.version];
   if (!rt) {
@@ -95,22 +95,22 @@ function functionRole(scope: Construct, id: string, logGroup: logs.LogGroup): ia
 export const tagValue = (v: string): string =>
   v.replace(/[^\p{L}\p{N}\s_.:/=+\-@]/gu, "-").slice(0, 256);
 
-const AUTH_CALLBACK_PATH = "/__flareon/auth/callback";
+const AUTH_CALLBACK_PATH = "/__flarelet/auth/callback";
 
 /**
  * シークレットにテンプレート上でタグを付ける（CloudFormation のスタックタグ伝播に頼らない）。
- * CI ロールは `flareon:stage=preview` かつ `flareon:lifecycle=ephemeral` のシークレットだけ読める。
+ * CI ロールは `flarelet:stage=preview` かつ `flarelet:lifecycle=ephemeral` のシークレットだけ読める。
  */
 /**
  * セッション世代（DECISIONS.md）。front はパラメータの **バージョン** をセッションに入れる。
- * `flareon auth revoke-sessions` / `auth user remove` が値を書き換えるとバージョンが進み、既存セッションは無効になる。
+ * `flarelet auth revoke-sessions` / `auth user remove` が値を書き換えるとバージョンが進み、既存セッションは無効になる。
  * 値ではなくバージョンを使うので、CloudFormation が値をテンプレートの初期値に書き戻しても失効は取り消されない。
  */
 function sessionEpoch(scope: Construct, name: string): ssm.StringParameter {
   const p = new ssm.StringParameter(scope, "SessionEpoch", {
     parameterName: name,
     stringValue: "initial",
-    description: "Flareon session epoch (its version invalidates older sessions)",
+    description: "Flarelet session epoch (its version invalidates older sessions)",
   });
   p.applyRemovalPolicy(RemovalPolicy.DESTROY);
   return p;
@@ -130,7 +130,7 @@ interface CognitoAuth {
 }
 
 interface StageStackProps extends StackProps {
-  ir: FlareonIR;
+  ir: FlareletIR;
   deployment: Deployment;
   account: string | undefined;
   /** 外部 IdP の資格情報シークレットのバージョン ID（名前 → VersionId）。分かれば固定する。 */
@@ -240,11 +240,11 @@ export class StageStack extends Stack {
         managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
       });
       const sessionSecret = new secretsmanager.Secret(this, "SessionSecret", {
-        description: "Flareon auth cookie signing key",
+        description: "Flarelet auth cookie signing key",
         generateSecretString: { passwordLength: 64, excludePunctuation: true },
         removalPolicy: removalOf("retain"),
       });
-      tagSecret(sessionSecret, { "flareon:stage": props.deployment.stage });
+      tagSecret(sessionSecret, { "flarelet:stage": props.deployment.stage });
       sessionEpoch(this, sessionEpochParam(props.ir.name, props.deployment));
       const identityProvider = addIdentityProvider(this, userPool, props);
       this.auth = { userPool, domainPrefix: prefix, sessionSecret, identityProvider };
@@ -254,7 +254,7 @@ export class StageStack extends Stack {
 }
 
 interface VersionStackProps extends StackProps {
-  ir: FlareonIR;
+  ir: FlareletIR;
   deployment: Deployment;
   models: ResolvedModel[];
   /** persistent のときの stage スタックのリソース。PR preview では undefined（自前で作る）。 */
@@ -269,7 +269,7 @@ export class VersionStack extends Stack {
     const ephemeral = deployment.lifecycle === "ephemeral";
     const lifetime: Lifetime = ephemeral ? "destroy" : "retain";
     const eff = effectiveAuth(ir, deployment);
-    // front auth Lambda を置くか（置く場合はクライアント由来の x-flareon-* を剥がしてから app に渡す）
+    // front auth Lambda を置くか（置く場合はクライアント由来の x-flarelet-* を剥がしてから app に渡す）
     const front = eff !== null && eff.kind !== "none";
 
     // --- data / auth のスコープ解決 ---
@@ -278,16 +278,19 @@ export class VersionStack extends Stack {
     let previewToken: secretsmanager.Secret | undefined;
     if (eff?.kind === "preview") {
       sessionSecret = new secretsmanager.Secret(this, "SessionSecret", {
-        description: "Flareon preview auth cookie signing key",
+        description: "Flarelet preview auth cookie signing key",
         generateSecretString: { passwordLength: 64, excludePunctuation: true },
         removalPolicy: removalOf(lifetime),
       });
       previewToken = new secretsmanager.Secret(this, "PreviewToken", {
-        description: "Flareon preview auth magic-link token",
+        description: "Flarelet preview auth magic-link token",
         generateSecretString: { passwordLength: 32, excludePunctuation: true },
         removalPolicy: removalOf(lifetime),
       });
-      const tags = { "flareon:stage": deployment.stage, "flareon:lifecycle": deployment.lifecycle };
+      const tags = {
+        "flarelet:stage": deployment.stage,
+        "flarelet:lifecycle": deployment.lifecycle,
+      };
       tagSecret(sessionSecret, tags);
       tagSecret(previewToken, tags);
       sessionEpoch(this, sessionEpochParam(ir.name, deployment));
@@ -298,13 +301,13 @@ export class VersionStack extends Stack {
     const environment: Record<string, string> = {
       AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
       PORT: "8080",
-      FLAREON_APP: ir.name,
-      FLAREON_STAGE: deployment.stage,
-      FLAREON_VERSION: deployment.version,
+      FLARELET_APP: ir.name,
+      FLARELET_STAGE: deployment.stage,
+      FLARELET_VERSION: deployment.version,
     };
-    // flareon/runtime の identity() が x-flareon-* を信頼してよいか（front が無い＝公開なら常に null）
-    if (ir.http) environment.FLAREON_AUTH_ENABLED = front ? "true" : "false";
-    if (ir.secrets.length) environment.FLAREON_SECRETS_PATH = path;
+    // flarelet/runtime の identity() が x-flarelet-* を信頼してよいか（front が無い＝公開なら常に null）
+    if (ir.http) environment.FLARELET_AUTH_ENABLED = front ? "true" : "false";
+    if (ir.secrets.length) environment.FLARELET_SECRETS_PATH = path;
     for (const [name, table] of Object.entries(data.tables)) {
       environment[bindingEnvName("DATABASE", name, "TABLE")] = table.tableName;
     }
@@ -367,7 +370,7 @@ export class VersionStack extends Stack {
     if (!ir.http) return;
 
     // --- HTTP API。Api → Client → front Lambda env の順で非循環に組む ---
-    const api = new apigwv2.HttpApi(this, "Api", { description: `Flareon ${ir.name}` });
+    const api = new apigwv2.HttpApi(this, "Api", { description: `Flarelet ${ir.name}` });
     let integrationTarget: lambda.IFunction = appFn;
 
     if (front) {
@@ -375,13 +378,13 @@ export class VersionStack extends Stack {
       // persistent は stage スタック、PR preview はこのスタックのパラメータ。名前はリテラル（Export を作らない）
       const epochParam = sessionEpochParam(ir.name, deployment);
       const frontEnv: Record<string, string> = {
-        FLAREON_APP_FUNCTION_NAME: appFn.functionName,
-        FLAREON_SESSION_SECRET_ARN: sessionSecret.secretArn,
-        FLAREON_SESSION_EPOCH_PARAM: epochParam,
+        FLARELET_APP_FUNCTION_NAME: appFn.functionName,
+        FLARELET_SESSION_SECRET_ARN: sessionSecret.secretArn,
+        FLARELET_SESSION_EPOCH_PARAM: epochParam,
       };
       if (previewToken) {
-        frontEnv.FLAREON_AUTH_MODE = "preview";
-        frontEnv.FLAREON_PREVIEW_TOKEN_SECRET_ARN = previewToken.secretArn;
+        frontEnv.FLARELET_AUTH_MODE = "preview";
+        frontEnv.FLARELET_PREVIEW_TOKEN_SECRET_ARN = previewToken.secretArn;
       } else {
         const sa = props.stage?.auth;
         if (!sa || eff.kind !== "cognito") throw new Error("internal: stage auth missing");
@@ -424,20 +427,20 @@ export class VersionStack extends Stack {
           clientId: client.userPoolClientId,
           useCognitoProvidedValues: true,
         });
-        frontEnv.FLAREON_AUTH_MODE = "cognito";
-        frontEnv.FLAREON_COGNITO_DOMAIN = `https://${sa.domainPrefix}.auth.${this.region}.amazoncognito.com`;
-        frontEnv.FLAREON_COGNITO_CLIENT_ID = client.userPoolClientId;
-        frontEnv.FLAREON_COGNITO_USER_POOL_ID = sa.userPool.userPoolId;
-        frontEnv.FLAREON_AUTH_PROVIDER = auth.provider;
+        frontEnv.FLARELET_AUTH_MODE = "cognito";
+        frontEnv.FLARELET_COGNITO_DOMAIN = `https://${sa.domainPrefix}.auth.${this.region}.amazoncognito.com`;
+        frontEnv.FLARELET_COGNITO_CLIENT_ID = client.userPoolClientId;
+        frontEnv.FLARELET_COGNITO_USER_POOL_ID = sa.userPool.userPoolId;
+        frontEnv.FLARELET_AUTH_PROVIDER = auth.provider;
         if (auth.allow?.domains.length) {
-          frontEnv.FLAREON_AUTH_ALLOW_DOMAINS = auth.allow.domains.join(",");
+          frontEnv.FLARELET_AUTH_ALLOW_DOMAINS = auth.allow.domains.join(",");
         }
         if (auth.allow?.emails.length)
-          frontEnv.FLAREON_AUTH_ALLOW_EMAILS = auth.allow.emails.join(",");
+          frontEnv.FLARELET_AUTH_ALLOW_EMAILS = auth.allow.emails.join(",");
         if (sa.identityProvider) {
           // IdP が先に存在しないと client の作成が失敗する（stage → version のスタック依存で保証）
           client.node.addDependency(sa.identityProvider.resource);
-          frontEnv.FLAREON_COGNITO_IDENTITY_PROVIDER = sa.identityProvider.name;
+          frontEnv.FLARELET_COGNITO_IDENTITY_PROVIDER = sa.identityProvider.name;
         }
       }
 
@@ -483,18 +486,18 @@ export class VersionStack extends Stack {
 }
 
 export interface BuildOptions {
-  ir: FlareonIR;
+  ir: FlareletIR;
   deployment: Deployment;
   region: string;
   account?: string;
   outdir?: string;
   /** アプリのディレクトリ（`app/` の親）。code.app を注入しない場合に必要。 */
   appDir?: string;
-  /** バンドルの中間生成物置き場（既定: <appDir>/.flareon/cache）。 */
+  /** バンドルの中間生成物置き場（既定: <appDir>/.flarelet/cache）。 */
   cacheDir?: string;
   /** Docker/esbuild/pip を使わずソースを詰める（テスト/E2E 用）。 */
   skipBundling?: boolean;
-  /** デプロイ元の Git ブランチ（version スタックの `flareon:branch` タグ。env list の表示用）。 */
+  /** デプロイ元の Git ブランチ（version スタックの `flarelet:branch` タグ。env list の表示用）。 */
   source?: string;
   /** 外部 IdP の資格情報シークレットのバージョン ID（deploy 時に AWS から取得）。 */
   idpSecretVersions?: Record<string, string>;
@@ -517,11 +520,11 @@ export function buildApp(o: BuildOptions): BuiltApp {
     ...(o.outdir ? { outdir: o.outdir } : {}),
     analyticsReporting: false,
     // CDK CLI が通常付与するコンテキスト。プログラムから synth すると既定で無効なため明示する
-    // （plan の差分と deploy の進捗を Flareon の概念に対応付けるのに使う）。
+    // （plan の差分と deploy の進捗を Flarelet の概念に対応付けるのに使う）。
     context: { "aws:cdk:enable-path-metadata": true },
   });
   const env = { region: o.region, ...(o.account ? { account: o.account } : {}) };
-  const baseTags = { "flareon:app": ir.name, "flareon:stage": deployment.stage };
+  const baseTags = { "flarelet:app": ir.name, "flarelet:stage": deployment.stage };
 
   const stageNeeded =
     ir.databases.length + ir.storages.length > 0 || Boolean(ir.http?.auth.enabled);
@@ -540,7 +543,7 @@ export function buildApp(o: BuildOptions): BuiltApp {
 
   const cacheDir = (what: string): string => {
     if (o.cacheDir) return o.cacheDir;
-    if (o.appDir) return join(o.appDir, ".flareon", "cache");
+    if (o.appDir) return join(o.appDir, ".flarelet", "cache");
     throw new Error(`internal: appDir is required to package the ${what}`);
   };
   const appCodeValue =
@@ -558,9 +561,9 @@ export function buildApp(o: BuildOptions): BuiltApp {
     env,
     tags: {
       ...baseTags,
-      "flareon:version": deployment.version,
-      "flareon:lifecycle": deployment.lifecycle,
-      ...(o.source ? { "flareon:branch": tagValue(o.source) } : {}),
+      "flarelet:version": deployment.version,
+      "flarelet:lifecycle": deployment.lifecycle,
+      ...(o.source ? { "flarelet:branch": tagValue(o.source) } : {}),
     },
     ir,
     deployment,

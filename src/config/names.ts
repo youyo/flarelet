@@ -1,7 +1,7 @@
 /**
  * 名前の制約。CloudFormation のスタック名（英数字とハイフン、128 文字以内）と
  * S3 バケット名（小文字・数字・ハイフン、63 文字以内）の両方で安全な範囲に収める。
- * `flareon-{app}-{stage}-{version}-{resource}` のような合成名が上限を超えないよう、各要素を短く制限する。
+ * `flarelet-{app}-{stage}-{version}-{resource}` のような合成名が上限を超えないよう、各要素を短く制限する。
  */
 
 /** 小文字英字で始まり、小文字英数字とハイフンのみ。ハイフンは連続・末尾不可。 */
@@ -18,7 +18,7 @@ export const VERSION_MAX = 32;
 
 /** シークレット名 = 環境変数名。 */
 export const SECRET_PATTERN = /^[A-Z][A-Z0-9_]*$/;
-export const RESERVED_SECRET_PREFIXES = ["FLAREON_", "AWS_"] as const;
+export const RESERVED_SECRET_PREFIXES = ["FLARELET_", "AWS_"] as const;
 
 export const isValidStage = (s: string): boolean => s.length <= STAGE_MAX && NAME_PATTERN.test(s);
 
@@ -26,7 +26,7 @@ export const isValidVersion = (s: string): boolean =>
   s.length <= VERSION_MAX && VERSION_PATTERN.test(s);
 
 /**
- * 外部 IdP の資格情報（client id / secret）の名前。`flareon secret set <名前>` で設定する。
+ * 外部 IdP の資格情報（client id / secret）の名前。`flarelet secret set <名前>` で設定する。
  * CloudFormation の ssm-secure 動的参照は Cognito IdP に使えないため、Secrets Manager に保存する（DECISIONS.md）。
  */
 export function idpSecretNames(provider: string): string[] {

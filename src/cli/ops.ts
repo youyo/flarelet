@@ -16,7 +16,7 @@ export interface OpsDeps extends SynthDeps {
 }
 
 export const isOffline = (env: Record<string, string | undefined>): boolean =>
-  ["1", "true"].includes(env.FLAREON_OFFLINE ?? "");
+  ["1", "true"].includes(env.FLARELET_OFFLINE ?? "");
 
 export const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 

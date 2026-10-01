@@ -25,7 +25,7 @@ export {
 
 export interface SynthesizedStack {
   name: string;
-  /** stage: 永続ステージのリソース、version: バージョン固有、preview: PR preview の全部入り、dev: flareon dev 用。 */
+  /** stage: 永続ステージのリソース、version: バージョン固有、preview: PR preview の全部入り、dev: flarelet dev 用。 */
   kind: "stage" | "version" | "preview" | "dev";
 }
 

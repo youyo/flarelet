@@ -4,7 +4,7 @@ import { escapeHtml, html, json, redirect } from "./responses.js";
 import { clearSessionCookie, issueSessionCookie } from "./session.js";
 import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
-export const PREVIEW_PATH = "/__flareon/auth/preview";
+export const PREVIEW_PATH = "/__flarelet/auth/preview";
 export const PREVIEW_IDENTITY = { sub: "preview" } as const;
 
 export interface PreviewContext {
@@ -43,7 +43,7 @@ function bodyToken(event: ApiEvent): string | undefined {
   return new URLSearchParams(raw).get("token") ?? undefined;
 }
 
-/** /__flareon/auth/preview（GET ?token= / POST form）。 */
+/** /__flarelet/auth/preview（GET ?token= / POST form）。 */
 export async function previewLogin(event: ApiEvent, ctx: PreviewContext): Promise<ApiResult> {
   const method = event.requestContext.http.method.toUpperCase();
   let token: string | undefined;

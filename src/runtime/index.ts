@@ -1,4 +1,4 @@
-// `flareon/runtime`: アプリ向け runtime bindings。環境変数を読むだけで AWS には接続しない。
+// `flarelet/runtime`: アプリ向け runtime bindings。環境変数を読むだけで AWS には接続しない。
 import { bindingEnvName, type BindingKind } from "./env.js";
 
 export { bindingEnvName } from "./env.js";
@@ -10,7 +10,7 @@ function need(kind: BindingKind, label: string, name: string, suffix: string, en
   const v = env[key];
   if (!v) {
     throw new Error(
-      `${label} "${name}" is not bound: ${key} is not set (is it declared in flareon.yaml?)`,
+      `${label} "${name}" is not bound: ${key} is not set (is it declared in flarelet.yaml?)`,
     );
   }
   return v;
@@ -60,24 +60,24 @@ function sameSecret(given: string | undefined, expected: string): boolean {
 }
 
 /**
- * Flareon front auth が付与する x-flareon-* ヘッダからユーザーを取り出す。未認証なら null。
- * - `http.auth: false`（FLAREON_AUTH_ENABLED=false）では front auth が無くクライアントのヘッダがそのまま届くので、
+ * Flarelet front auth が付与する x-flarelet-* ヘッダからユーザーを取り出す。未認証なら null。
+ * - `http.auth: false`（FLARELET_AUTH_ENABLED=false）では front auth が無くクライアントのヘッダがそのまま届くので、
  *   ヘッダに関わらず常に null を返す。
- * - `flareon dev`（FLAREON_DEV_SECRET が設定されている）では、dev プロキシが付けた秘密ヘッダ
- *   `x-flareon-dev-secret` が一致するときだけ identity を返す（プロキシを経由せずアプリに直接届いたリクエストを信用しない）。
+ * - `flarelet dev`（FLARELET_DEV_SECRET が設定されている）では、dev プロキシが付けた秘密ヘッダ
+ *   `x-flarelet-dev-secret` が一致するときだけ identity を返す（プロキシを経由せずアプリに直接届いたリクエストを信用しない）。
  *
  * 認可・ユーザーの紐付けには `sub` を使う。`email` を使う場合は `emailVerified` を確認すること。
  */
 export function identity(headers: HeaderBag, env: Env = process.env): Identity | null {
-  if (env.FLAREON_AUTH_ENABLED === "false") return null;
-  const devSecret = env.FLAREON_DEV_SECRET;
-  if (devSecret && !sameSecret(header(headers, "x-flareon-dev-secret"), devSecret)) return null;
-  const sub = header(headers, "x-flareon-user-sub");
+  if (env.FLARELET_AUTH_ENABLED === "false") return null;
+  const devSecret = env.FLARELET_DEV_SECRET;
+  if (devSecret && !sameSecret(header(headers, "x-flarelet-dev-secret"), devSecret)) return null;
+  const sub = header(headers, "x-flarelet-user-sub");
   if (!sub) return null;
   return {
     sub,
-    email: header(headers, "x-flareon-user-email"),
-    emailVerified: header(headers, "x-flareon-user-email-verified") === "true",
-    authMode: header(headers, "x-flareon-auth-mode"),
+    email: header(headers, "x-flarelet-user-email"),
+    emailVerified: header(headers, "x-flarelet-user-email-verified") === "true",
+    authMode: header(headers, "x-flarelet-auth-mode"),
   };
 }

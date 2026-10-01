@@ -7,9 +7,9 @@ import type { BuildOptions } from "../../src/constructs/index.js";
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-synth-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-synth-"));
   await writeFile(
-    join(dir, "flareon.yaml"),
+    join(dir, "flarelet.yaml"),
     `version: 1
 name: myapp
 runtime: { language: python }
@@ -41,15 +41,15 @@ function harness(
       return {
         outdir: o.outdir,
         stacks: [
-          { name: "flareon-myapp-prod", kind: "stage" },
-          { name: "flareon-myapp-prod-v1", kind: "version" },
+          { name: "flarelet-myapp-prod", kind: "stage" },
+          { name: "flarelet-myapp-prod-v1", kind: "version" },
         ],
       };
     },
   };
   return { out, err, calls, deps };
 }
-const file = () => join(dir, "flareon.yaml");
+const file = () => join(dir, "flarelet.yaml");
 
 describe("runSynth", () => {
   it("resolves the deployment from the Git branch and writes metadata", async () => {
@@ -57,10 +57,10 @@ describe("runSynth", () => {
     expect(await runSynth({ file: file() }, h.deps)).toBe(0);
     const c = h.calls[0]!;
     expect(c.deployment).toEqual({ stage: "prod", version: "v1", lifecycle: "persistent" });
-    expect(c.outdir).toBe(join(dir, ".flareon", "out"));
+    expect(c.outdir).toBe(join(dir, ".flarelet", "out"));
     expect(c.appDir).toBe(dir);
     expect(c.region).toBe("us-east-1");
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta).toEqual({
       app: "myapp",
       stage: "prod",
@@ -68,11 +68,11 @@ describe("runSynth", () => {
       lifecycle: "persistent",
       region: "us-east-1",
       stacks: [
-        { name: "flareon-myapp-prod", kind: "stage" },
-        { name: "flareon-myapp-prod-v1", kind: "version" },
+        { name: "flarelet-myapp-prod", kind: "stage" },
+        { name: "flarelet-myapp-prod-v1", kind: "version" },
       ],
     });
-    expect(h.out.join("\n")).toContain("flareon-myapp-prod-v1");
+    expect(h.out.join("\n")).toContain("flarelet-myapp-prod-v1");
   });
 
   it("maps the default branch to preview/current and honours --branch / --default-branch", async () => {
@@ -129,7 +129,7 @@ describe("runSynth", () => {
   });
 
   it("takes the region from --region, then AWS_REGION, and skips bundling via env", async () => {
-    const h = harness({}, { AWS_REGION: "eu-west-1", FLAREON_SKIP_BUNDLING: "1" });
+    const h = harness({}, { AWS_REGION: "eu-west-1", FLARELET_SKIP_BUNDLING: "1" });
     await runSynth({ file: file(), stage: "prod", version: "v1" }, h.deps);
     expect(h.calls[0]!.region).toBe("eu-west-1");
     expect(h.calls[0]!.skipBundling).toBe(true);
@@ -153,15 +153,15 @@ describe("runSynth", () => {
 });
 
 describe("runPlan", () => {
-  it("synthesizes and prints the plan in Flareon terms", async () => {
+  it("synthesizes and prints the plan in Flarelet terms", async () => {
     const h = harness();
     await mkdir(join(dir, "app"), { recursive: true });
     expect(await runPlan({ file: file(), stage: "prod", version: "v2" }, h.deps)).toBe(0);
     const text = h.out.join("\n");
-    expect(text).toContain("Flareon will create myapp (prod/v2)");
+    expect(text).toContain("Flarelet will create myapp (prod/v2)");
     expect(text).toContain("+ application version v2");
     expect(text).toContain("+ database.main");
-    expect(text).toContain("flareon deploy --stage prod --version v2");
+    expect(text).toContain("flarelet deploy --stage prod --version v2");
     expect(h.calls).toHaveLength(1);
   });
 });

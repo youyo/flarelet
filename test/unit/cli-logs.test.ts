@@ -26,7 +26,7 @@ describe("parseSince", () => {
 async function deployed() {
   h = await harness(YAML);
   h.cloud.addStack({
-    name: "flareon-myapp-prod-v1",
+    name: "flarelet-myapp-prod-v1",
     outputs: { AppLogGroup: "/app", FrontLogGroup: "/front" },
   });
 }

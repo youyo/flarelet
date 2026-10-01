@@ -63,7 +63,7 @@ describe.runIf(ENABLED)("real AWS: switching an existing stage to google + allow
       await forceCleanup(app, tracked);
       for (const n of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) {
         // 安全網（destroy --stage-resources が消すはず）
-        const id = `flareon/${app}/prod/auth/${n}`;
+        const id = `flarelet/${app}/prod/auth/${n}`;
         const gone = await sm
           .send(new DescribeSecretCommand({ SecretId: id }))
           .then((d) => Boolean(d.DeletedDate))
@@ -83,7 +83,7 @@ describe.runIf(ENABLED)("real AWS: switching an existing stage to google + allow
       log(`deploy ${app} (cognito): exit ${r.code} in ${r.ms}ms`);
       expect(r.code, r.stderr + r.stdout).toBe(0);
       await track(app, tracked);
-      poolId = (await stackOutputs(`flareon-${app}-prod`))!.UserPoolId!;
+      poolId = (await stackOutputs(`flarelet-${app}-prod`))!.UserPoolId!;
       await idp.send(
         new AdminCreateUserCommand({
           UserPoolId: poolId,
@@ -105,7 +105,7 @@ describe.runIf(ENABLED)("real AWS: switching an existing stage to google + allow
     "switching to google adds custom:hd in place: same user pool, users kept",
     async () => {
       await writeFile(
-        join(dir, "flareon.yaml"),
+        join(dir, "flarelet.yaml"),
         yaml(app, "    provider: google\n    allow: { domains: [example.com] }\n"),
       );
       for (const [n, v] of [
@@ -124,7 +124,7 @@ describe.runIf(ENABLED)("real AWS: switching an existing stage to google + allow
       expect(r.code, r.stderr + r.stdout).toBe(0);
       await track(app, tracked);
 
-      expect((await stackOutputs(`flareon-${app}-prod`))!.UserPoolId).toBe(poolId);
+      expect((await stackOutputs(`flarelet-${app}-prod`))!.UserPoolId).toBe(poolId);
       const user = await idp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: email }));
       expect(user.Username).toBeTruthy();
       const pool = await idp.send(new DescribeUserPoolCommand({ UserPoolId: poolId }));
@@ -132,7 +132,7 @@ describe.runIf(ENABLED)("real AWS: switching an existing stage to google + allow
 
       // front は Google を直接指定して authorize へ送る
       const url = urlFrom(r.stdout);
-      const login = await get(`${url}/__flareon/auth/login`, { accept: "text/html" });
+      const login = await get(`${url}/__flarelet/auth/login`, { accept: "text/html" });
       expect(login.status).toBe(302);
       const authorize = new URL(login.headers.get("location")!);
       expect(authorize.searchParams.get("identity_provider")).toBe("Google");

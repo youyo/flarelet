@@ -14,15 +14,15 @@ import {
 
 const ALLOW_ENV = {
   ...COGNITO_ENV,
-  FLAREON_AUTH_PROVIDER: "google",
-  FLAREON_AUTH_ALLOW_DOMAINS: "example.com",
+  FLARELET_AUTH_PROVIDER: "google",
+  FLARELET_AUTH_ALLOW_DOMAINS: "example.com",
 };
 
 async function signInWith(env: Record<string, string>, claims: Record<string, unknown>) {
   const deps = await makeDeps();
   const handler = createHandler(env, deps);
   const login = await handler(
-    makeEvent({ rawPath: "/__flareon/auth/login", rawQueryString: "return_to=%2Fdash" }),
+    makeEvent({ rawPath: "/__flarelet/auth/login", rawQueryString: "return_to=%2Fdash" }),
   );
   const loc = new URL(login.headers!.location!);
   const flow = cookieValue(login.cookies, FLOW_COOKIE)!;
@@ -34,7 +34,7 @@ async function signInWith(env: Record<string, string>, claims: Record<string, un
   deps.setFetch(async () => new Response(JSON.stringify({ id_token: idToken }), { status: 200 }));
   const res = await handler(
     makeEvent({
-      rawPath: "/__flareon/auth/callback",
+      rawPath: "/__flarelet/auth/callback",
       rawQueryString: `code=C&state=${loc.searchParams.get("state")}`,
       cookies: [`${FLOW_COOKIE}=${flow}`],
     }),
@@ -51,7 +51,7 @@ describe("allow policy at sign-in", () => {
     expect(res.statusCode).toBe(403);
     expect(res.headers!["content-type"]).toContain("text/html");
     expect(res.body).toContain("mallory@example.com");
-    expect(res.body).toContain('href="/__flareon/auth/logout"');
+    expect(res.body).toContain('href="/__flarelet/auth/logout"');
     expect(cookieValue(res.cookies, SESSION_COOKIE)).toBeUndefined();
     expect(res.cookies!.some((c) => c.startsWith(`${FLOW_COOKIE}=;`))).toBe(true);
     expect(deps.invocations).toHaveLength(0);
@@ -88,7 +88,7 @@ describe("allow policy at sign-in", () => {
     expect(api.statusCode).toBe(401);
     const nav = await handler(makeEvent({ headers: { cookie: old, accept: "text/html" } }));
     expect(nav.statusCode).toBe(302);
-    expect(nav.headers!.location).toContain("/__flareon/auth/login");
+    expect(nav.headers!.location).toContain("/__flarelet/auth/login");
     expect(deps.invocations).toHaveLength(0);
   });
 

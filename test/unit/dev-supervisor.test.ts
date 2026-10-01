@@ -119,7 +119,7 @@ describe("supervisor", () => {
       "node_modules/x/index.js",
       "__pycache__/main.cpython-313.pyc",
       ".venv/lib/a.py",
-      ".flareon/dev/index.mjs",
+      ".flarelet/dev/index.mjs",
       ".main.py.swp",
       "main.py~",
     ]) {

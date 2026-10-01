@@ -1,5 +1,5 @@
 import { resolveModel } from "../constructs/ai-models.js";
-import type { FlareonIR } from "../ir/index.js";
+import type { FlareletIR } from "../ir/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 
 export interface BindingEntry {
@@ -11,7 +11,7 @@ export interface BindingEntry {
   stateful: boolean;
 }
 
-export function bindingEntries(ir: FlareonIR): BindingEntry[] {
+export function bindingEntries(ir: FlareletIR): BindingEntry[] {
   return [
     ...ir.databases.map((d) => ({
       label: `database.${d.name}`,
@@ -31,7 +31,7 @@ export function bindingEntries(ir: FlareonIR): BindingEntry[] {
   ];
 }
 
-const BINDING_ENV = /^FLAREON_(DATABASE|STORAGE|AI)_[A-Z0-9_]+$/;
+const BINDING_ENV = /^FLARELET_(DATABASE|STORAGE|AI)_[A-Z0-9_]+$/;
 
 /** デプロイ済み app Lambda の環境変数からバインディングだけを取り出す。 */
 export function pickBindingEnv(env: Record<string, string>): Record<string, string> {
@@ -39,7 +39,7 @@ export function pickBindingEnv(env: Record<string, string>): Record<string, stri
 }
 
 /** AI モデルのバインディング（リージョンから決まる定数）。 */
-export function aiBindingEnv(ir: FlareonIR, region: string): Record<string, string> {
+export function aiBindingEnv(ir: FlareletIR, region: string): Record<string, string> {
   return Object.fromEntries(
     ir.aiModels.map((m) => [
       bindingEnvName("AI", m, "MODEL_ID"),

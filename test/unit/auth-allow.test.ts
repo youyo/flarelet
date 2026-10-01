@@ -139,9 +139,9 @@ describe("parseAuthConfig (allow)", () => {
   it("reads the provider and allow lists", () => {
     const c = parseAuthConfig({
       ...COGNITO_ENV,
-      FLAREON_AUTH_PROVIDER: "google",
-      FLAREON_AUTH_ALLOW_DOMAINS: "example.com,example.org",
-      FLAREON_AUTH_ALLOW_EMAILS: "a@gmail.com",
+      FLARELET_AUTH_PROVIDER: "google",
+      FLARELET_AUTH_ALLOW_DOMAINS: "example.com,example.org",
+      FLARELET_AUTH_ALLOW_EMAILS: "a@gmail.com",
     });
     expect(c.mode === "cognito" && c.cognito.provider).toBe("google");
     expect(c.mode === "cognito" && c.cognito.allow).toEqual({
@@ -155,8 +155,8 @@ describe("parseAuthConfig (allow)", () => {
     expect(c.mode === "cognito" && c.cognito.allow).toBeUndefined();
   });
   it("rejects unknown providers", () => {
-    expect(() => parseAuthConfig({ ...COGNITO_ENV, FLAREON_AUTH_PROVIDER: "saml" })).toThrow(
-      /FLAREON_AUTH_PROVIDER/,
+    expect(() => parseAuthConfig({ ...COGNITO_ENV, FLARELET_AUTH_PROVIDER: "saml" })).toThrow(
+      /FLARELET_AUTH_PROVIDER/,
     );
   });
 });

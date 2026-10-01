@@ -2,7 +2,7 @@ import type { ApiEvent, ApiResult, AuthDeps, AuthMode, Identity } from "./types.
 import { json } from "./responses.js";
 import { SESSION_COOKIE } from "./session.js";
 
-const PREFIX = "x-flareon-";
+const PREFIX = "x-flarelet-";
 
 function isTimeoutError(e: unknown): boolean {
   const name = e instanceof Error ? e.name : "";
@@ -13,7 +13,7 @@ function stripSession(cookies: string[]): string[] {
   return cookies.filter((c) => !c.trim().startsWith(`${SESSION_COOKIE}=`));
 }
 
-/** x-flareon-* の除去と identity ヘッダの付与を行った v2 イベントを作る。 */
+/** x-flarelet-* の除去と identity ヘッダの付与を行った v2 イベントを作る。 */
 export function buildAppEvent(event: ApiEvent, identity: Identity, mode: AuthMode): ApiEvent {
   const headers: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(event.headers)) {
@@ -28,12 +28,12 @@ export function buildAppEvent(event: ApiEvent, identity: Identity, mode: AuthMod
     if (rest.length) headers["cookie"] = rest.join("; ");
     else delete headers["cookie"];
   }
-  headers["x-flareon-user-sub"] = identity.sub;
-  if (identity.email !== undefined) headers["x-flareon-user-email"] = identity.email;
+  headers["x-flarelet-user-sub"] = identity.sub;
+  if (identity.email !== undefined) headers["x-flarelet-user-email"] = identity.email;
   // email は IdP 由来の値で、検証済みとは限らない。認可・ユーザー紐付けは sub を使い、email を使うならこれを確認する
-  headers["x-flareon-user-email-verified"] =
+  headers["x-flarelet-user-email-verified"] =
     identity.email !== undefined && identity.emailVerified === true ? "true" : "false";
-  headers["x-flareon-auth-mode"] = mode;
+  headers["x-flarelet-auth-mode"] = mode;
   const out: ApiEvent = { ...event, headers };
   if (event.cookies) out.cookies = stripSession(event.cookies);
   return out;

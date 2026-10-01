@@ -1,4 +1,4 @@
-// flareon init / workflow generate / validate の GitHub Actions ワークフロー連動（ビルド済み CLI を実行）
+// flarelet init / workflow generate / validate の GitHub Actions ワークフロー連動（ビルド済み CLI を実行）
 import { execFile, execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,8 +28,8 @@ const hasActionlint = (() => {
 let dir: string;
 let wf: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-wf-"));
-  wf = join(dir, ".github/workflows/flareon.yml");
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-wf-"));
+  wf = join(dir, ".github/workflows/flarelet.yml");
   // default branch を main に固定
   await new Promise((res) => execFile("git", ["init", "-b", "main"], { cwd: dir }, res));
 });
@@ -49,14 +49,14 @@ describe("workflow follows the git settings", () => {
   it("init generates [main]; after editing git settings, workflow generate re-syncs it", async () => {
     expect((await run(["init", "."], dir)).code).toBe(0);
     expect(await branches()).toEqual(["main"]);
-    expect(await readFile(wf, "utf8")).toContain("flareon workflow generate --force");
+    expect(await readFile(wf, "utf8")).toContain("flarelet workflow generate --force");
 
     let r = await run(["workflow", "generate"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout).toContain("up to date");
 
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       GIT_YAML(
         "git:\n  production:\n    branch: release/*\n    version: branch\n  preview:\n    branch: default\n",
       ),
@@ -66,7 +66,7 @@ describe("workflow follows the git settings", () => {
     r = await run(["validate"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(r.stderr).toContain("Warning:");
-    expect(r.stderr).toContain("flareon workflow generate --force");
+    expect(r.stderr).toContain("flarelet workflow generate --force");
 
     // --force なしでは上書きしない
     r = await run(["workflow", "generate"], dir);
@@ -84,14 +84,14 @@ describe("workflow follows the git settings", () => {
   });
 
   it("validate is silent when there is no workflow file", async () => {
-    await writeFile(join(dir, "flareon.yaml"), GIT_YAML("git:\n  preview:\n    branch: dev/*\n"));
+    await writeFile(join(dir, "flarelet.yaml"), GIT_YAML("git:\n  preview:\n    branch: dev/*\n"));
     const r = await run(["validate"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(r.stderr).toBe("");
   });
 
   it("workflow generate creates the file when missing", async () => {
-    await writeFile(join(dir, "flareon.yaml"), GIT_YAML("git:\n  preview:\n    branch: dev/*\n"));
+    await writeFile(join(dir, "flarelet.yaml"), GIT_YAML("git:\n  preview:\n    branch: dev/*\n"));
     const r = await run(["workflow", "generate"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(await branches()).toEqual(["main", "dev/*"]);
@@ -99,7 +99,7 @@ describe("workflow follows the git settings", () => {
 
   it.skipIf(!hasActionlint)("generated workflows pass actionlint", async () => {
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       GIT_YAML("git:\n  production:\n    branch: release/*\n  preview:\n    branch: default\n"),
     );
     expect((await run(["workflow", "generate"], dir)).code).toBe(0);

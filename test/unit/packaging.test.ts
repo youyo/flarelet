@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { bundleFrontAuth, pythonBundling, stageAppSource } from "../../src/constructs/packaging.js";
 
-const tmp = (p: string) => mkdtempSync(join(tmpdir(), `flareon-${p}-`));
+const tmp = (p: string) => mkdtempSync(join(tmpdir(), `flarelet-${p}-`));
 
 describe("stageAppSource", () => {
   it("python: copies app files (without caches/venvs) and adds the launcher", () => {
@@ -21,8 +21,8 @@ describe("stageAppSource", () => {
     expect(existsSync(join(out, "requirements.txt"))).toBe(true);
     expect(existsSync(join(out, "__pycache__"))).toBe(false);
     expect(existsSync(join(out, ".venv"))).toBe(false);
-    expect(statSync(join(out, "flareon-launcher.sh")).mode & 0o111).not.toBe(0);
-    expect(existsSync(join(out, "flareon-secrets.py"))).toBe(true);
+    expect(statSync(join(out, "flarelet-launcher.sh")).mode & 0o111).not.toBe(0);
+    expect(existsSync(join(out, "flarelet-secrets.py"))).toBe(true);
   });
 
   it("python: requires main.py", () => {
@@ -48,8 +48,8 @@ describe("stageAppSource", () => {
     const js = readFileSync(join(out, "index.mjs"), "utf8");
     expect(js).toContain("listening");
     expect(js).not.toContain(": number");
-    expect(existsSync(join(out, "flareon-secrets.cjs"))).toBe(true);
-    expect(statSync(join(out, "flareon-launcher.sh")).mode & 0o111).not.toBe(0);
+    expect(existsSync(join(out, "flarelet-secrets.cjs"))).toBe(true);
+    expect(statSync(join(out, "flarelet-launcher.sh")).mode & 0o111).not.toBe(0);
   });
 
   it("typescript: requires app/index.ts", () => {
@@ -80,7 +80,7 @@ describe("pythonBundling", () => {
     expect(b.platform).toBe("linux/arm64");
     const cmd = (b.command ?? []).join(" ");
     expect(cmd).toMatch(/pip install .*-r requirements\.txt/);
-    // deploy の出力を Flareon の進捗に保つため pip は静かにする
+    // deploy の出力を Flarelet の進捗に保つため pip は静かにする
     expect(cmd).toMatch(/pip install .*(-q|--quiet)/);
     expect(cmd).toContain("/asset-output");
   });

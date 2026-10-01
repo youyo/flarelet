@@ -111,7 +111,7 @@ export function generateZshCompletion(program: Command): string {
   const name = program.name();
   const fns: string[] = [];
   emit(program, [`${name}`], fns);
-  // ルート関数名は `_<name>`（path の先頭が name なので fnName で `_flareon` になる）
+  // ルート関数名は `_<name>`（path の先頭が name なので fnName で `_flarelet` になる）
   return [
     `#compdef ${name}`,
     "",
@@ -126,7 +126,7 @@ export function generateZshCompletion(program: Command): string {
   ].join("\n");
 }
 
-/** `flareon completion <shell>` の本体。 */
+/** `flarelet completion <shell>` の本体。 */
 export function runCompletion(shell: string, program: Command, io: Io): number {
   if (shell !== "zsh") {
     io.stderr(`Error: unsupported shell "${shell}" (supported: ${COMPLETION_SHELLS.join(", ")})`);

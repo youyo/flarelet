@@ -1,4 +1,4 @@
-// flareon dev（既定モード）: preview/local-<user> の dev スタック作成 → ローカルアプリ → 実テーブルへ書き込み → 停止 → destroy
+// flarelet dev（既定モード）: preview/local-<user> の dev スタック作成 → ローカルアプリ → 実テーブルへ書き込み → 停止 → destroy
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
@@ -31,7 +31,7 @@ function freePort(): Promise<number> {
   });
 }
 
-describe.runIf(ENABLED)("real AWS: flareon dev", () => {
+describe.runIf(ENABLED)("real AWS: flarelet dev", () => {
   const app = uniqueName("dev");
   const tracked = newTracked();
   const secretValue = randomBytes(16).toString("hex");
@@ -107,7 +107,7 @@ secrets: [E2E_SECRET]
         expect(out).not.toContain(secretValue);
         await track(app, tracked);
 
-        const stack = await stackOutputs(`flareon-${app}-preview-${version}`);
+        const stack = await stackOutputs(`flarelet-${app}-preview-${version}`);
         expect(stack?.Bindings).toBeDefined();
 
         const key = `k${Date.now()}`;
@@ -127,7 +127,7 @@ secrets: [E2E_SECRET]
           new GetItemCommand({ TableName: put.table, Key: { pk: { S: "e2e" }, sk: { S: key } } }),
         );
         expect(item.Item?.value?.S).toBe(value);
-        expect(JSON.parse(stack!.Bindings!).FLAREON_DATABASE_MAIN_TABLE).toBe(put.table);
+        expect(JSON.parse(stack!.Bindings!).FLARELET_DATABASE_MAIN_TABLE).toBe(put.table);
 
         const secret = (await (await fetch(`http://localhost:${port}/secret`)).json()) as {
           sha256: string;
@@ -137,14 +137,14 @@ secrets: [E2E_SECRET]
         child.kill("SIGINT");
       }
       expect(await exited).toBe(0);
-      expect(lines.join("\n")).toContain(`flareon destroy --stage preview --version ${version}`);
+      expect(lines.join("\n")).toContain(`flarelet destroy --stage preview --version ${version}`);
 
       const env = await cli(["env", "list"], dir);
       expect(env.stdout).toMatch(new RegExp(`preview\\s+${version}\\s+dev`));
 
       const destroy = await cli(["destroy", "--stage", "preview", "--version", version!], dir);
       expect(destroy.code, destroy.stderr).toBe(0);
-      expect(await stackOutputs(`flareon-${app}-preview-${version}`)).toBeUndefined();
+      expect(await stackOutputs(`flarelet-${app}-preview-${version}`)).toBeUndefined();
       const del = await cli(["secret", "delete", "E2E_SECRET", "--stage", "preview"], dir);
       expect(del.code, del.stderr).toBe(0);
       version = undefined;

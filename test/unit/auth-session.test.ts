@@ -17,7 +17,7 @@ describe("parseAuthConfig", () => {
     expect(c.mode).toBe("cognito");
     if (c.mode === "cognito") {
       expect(c.cognito.clientId).toBe("client123");
-      expect(c.cognito.domain).toBe(COGNITO_ENV.FLAREON_COGNITO_DOMAIN);
+      expect(c.cognito.domain).toBe(COGNITO_ENV.FLARELET_COGNITO_DOMAIN);
     }
     expect(c.appFunctionName).toBe("app-fn");
   });
@@ -29,20 +29,20 @@ describe("parseAuthConfig", () => {
   it("末尾スラッシュの cognito domain を正規化する", () => {
     const c = parseAuthConfig({
       ...COGNITO_ENV,
-      FLAREON_COGNITO_DOMAIN: "https://x.auth.y.amazoncognito.com/",
+      FLARELET_COGNITO_DOMAIN: "https://x.auth.y.amazoncognito.com/",
     });
     if (c.mode === "cognito") expect(c.cognito.domain).toBe("https://x.auth.y.amazoncognito.com");
   });
   it("必須が欠けるとエラー", () => {
-    expect(() => parseAuthConfig({})).toThrow(/FLAREON_AUTH_MODE/);
-    expect(() => parseAuthConfig({ ...COGNITO_ENV, FLAREON_COGNITO_CLIENT_ID: undefined })).toThrow(
-      /FLAREON_COGNITO_CLIENT_ID/,
-    );
+    expect(() => parseAuthConfig({})).toThrow(/FLARELET_AUTH_MODE/);
     expect(() =>
-      parseAuthConfig({ ...PREVIEW_ENV, FLAREON_PREVIEW_TOKEN_SECRET_ARN: undefined }),
-    ).toThrow(/FLAREON_PREVIEW_TOKEN_SECRET_ARN/);
-    expect(() => parseAuthConfig({ ...PREVIEW_ENV, FLAREON_AUTH_MODE: "x" })).toThrow(
-      /FLAREON_AUTH_MODE/,
+      parseAuthConfig({ ...COGNITO_ENV, FLARELET_COGNITO_CLIENT_ID: undefined }),
+    ).toThrow(/FLARELET_COGNITO_CLIENT_ID/);
+    expect(() =>
+      parseAuthConfig({ ...PREVIEW_ENV, FLARELET_PREVIEW_TOKEN_SECRET_ARN: undefined }),
+    ).toThrow(/FLARELET_PREVIEW_TOKEN_SECRET_ARN/);
+    expect(() => parseAuthConfig({ ...PREVIEW_ENV, FLARELET_AUTH_MODE: "x" })).toThrow(
+      /FLARELET_AUTH_MODE/,
     );
   });
 });
@@ -72,7 +72,7 @@ describe("session cookie", () => {
     const c = issueSessionCookie({ sub: "u1", email: "a@b.c" }, "cognito", SESSION_KEY, NOW);
     expect(c.startsWith(`${SESSION_COOKIE}=`)).toBe(true);
     // __Host- プレフィックス: Secure・Path=/・Domain なしをブラウザに強制させる（サブドメイン等からの上書きを防ぐ）
-    expect(SESSION_COOKIE).toBe("__Host-flareon_session");
+    expect(SESSION_COOKIE).toBe("__Host-flarelet_session");
     expect(c).not.toMatch(/Domain=/i);
     expect(c).toMatch(/; Path=\/(;|$)/);
     expect(c).toContain("HttpOnly");

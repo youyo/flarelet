@@ -5,7 +5,7 @@ import type { SynthResult } from "../constructs/index.js";
 import { secretsPath, stackNames } from "../constructs/names.js";
 import { aiBindingEnv, bindingEntries, pickBindingEnv } from "../dev/bindings.js";
 import { devVersion } from "../dev/user.js";
-import type { FlareonIR, RuntimeLanguage } from "../ir/index.js";
+import type { FlareletIR, RuntimeLanguage } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { ResolveError, resolveDeployment } from "../resolver/index.js";
 import { progressPrinter } from "./deploy.js";
@@ -21,12 +21,12 @@ export interface DevArgs {
   version?: string;
   region?: string;
   port?: number;
-  /** 擬似 identity（`x-flareon-user-email` 等）を付ける。 */
+  /** 擬似 identity（`x-flarelet-user-email` 等）を付ける。 */
   as?: string;
 }
 
 export interface LocalOptions {
-  /** flareon.yaml のあるディレクトリ（アプリは `<appDir>/app`）。 */
+  /** flarelet.yaml のあるディレクトリ（アプリは `<appDir>/app`）。 */
   appDir: string;
   language: RuntimeLanguage;
   /** アプリに渡す環境変数（PORT はローカル側が決める）。 */
@@ -41,7 +41,7 @@ export interface LocalSession {
   stop(): Promise<void>;
 }
 
-/** `flareon dev` の依存。ローカル起動・停止待ちも差し替え可能。 */
+/** `flarelet dev` の依存。ローカル起動・停止待ちも差し替え可能。 */
 export interface DevDeps extends OpsDeps {
   username: () => string;
   synthesizeDev: (o: DevBuildOptions & { outdir: string }) => SynthResult;
@@ -67,7 +67,7 @@ function definedEnv(env: Record<string, string | undefined>): Record<string, str
 }
 
 async function localBindings(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   region: string,
   appDir: string,
@@ -78,7 +78,7 @@ async function localBindings(
   const bindings = aiBindingEnv(ir, region);
   if (ir.databases.length + ir.storages.length === 0) return bindings;
   const account = await cloud.account();
-  const outdir = join(appDir, ".flareon", "dev", "out");
+  const outdir = join(appDir, ".flarelet", "dev", "out");
   let result: SynthResult;
   try {
     result = deps.synthesizeDev({ ir, deployment: d, region, account, outdir });
@@ -103,7 +103,7 @@ async function localBindings(
 }
 
 async function connectBindings(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   cloud: Cloud,
   io: DevDeps["io"],
@@ -118,7 +118,7 @@ async function connectBindings(
 }
 
 async function resolve(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   connect: boolean,
   region: string,
@@ -132,7 +132,7 @@ async function resolve(
     if (!connect) await cloud.account();
   } catch (e) {
     deps.io.stderr(`Error: cannot reach AWS: ${errorMessage(e)}`);
-    deps.io.stderr("  (to run the app without AWS resources, set FLAREON_OFFLINE=1)");
+    deps.io.stderr("  (to run the app without AWS resources, set FLARELET_OFFLINE=1)");
     return null;
   }
   try {
@@ -155,7 +155,7 @@ async function resolve(
 }
 
 function screen(
-  ir: FlareonIR,
+  ir: FlareletIR,
   d: Deployment,
   url: string,
   r: Resolved,
@@ -219,7 +219,7 @@ export async function runDev(args: DevArgs, deps: DevDeps): Promise<number> {
   const appDir = dirname(args.file);
   const port = args.port ?? DEFAULT_DEV_PORT;
 
-  io.stdout("Flareon dev");
+  io.stdout("Flarelet dev");
   io.stdout("");
   const r = await resolve(ir, d, connect, region, appDir, deps);
   if (!r) return 1;
@@ -227,12 +227,12 @@ export async function runDev(args: DevArgs, deps: DevDeps): Promise<number> {
   const env: Record<string, string> = {
     ...definedEnv(deps.env),
     AWS_REGION: region,
-    FLAREON_DEV: "1",
-    // ローカルのプロキシは常にクライアント由来の x-flareon-* を剥がす（Lambda の front auth と同じ扱い）
-    FLAREON_AUTH_ENABLED: "true",
-    FLAREON_APP: ir.name,
-    FLAREON_STAGE: d.stage,
-    FLAREON_VERSION: d.version,
+    FLARELET_DEV: "1",
+    // ローカルのプロキシは常にクライアント由来の x-flarelet-* を剥がす（Lambda の front auth と同じ扱い）
+    FLARELET_AUTH_ENABLED: "true",
+    FLARELET_APP: ir.name,
+    FLARELET_STAGE: d.stage,
+    FLARELET_VERSION: d.version,
     ...r.bindings,
     ...r.secrets,
   };
@@ -258,7 +258,7 @@ export async function runDev(args: DevArgs, deps: DevDeps): Promise<number> {
   io.stdout("Stopped.");
   if (r.devStack) {
     io.stdout(
-      `The dev resources are kept for next time. Remove them with: flareon destroy --stage ${d.stage} --version ${d.version}`,
+      `The dev resources are kept for next time. Remove them with: flarelet destroy --stage ${d.stage} --version ${d.version}`,
     );
   }
   return 0;

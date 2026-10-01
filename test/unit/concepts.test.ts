@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import { conceptOf, diffTemplates, type CfnTemplate } from "../../src/aws/concepts.js";
 
 describe("conceptOf", () => {
-  it("maps CDK construct paths to Flareon concepts", () => {
-    expect(conceptOf("flareon-a-prod/Data/Database-main/Resource")).toBe("database.main");
-    expect(conceptOf("/flareon-a-prod/Data/Storage-files/Resource")).toBe("storage.files");
-    expect(conceptOf("/flareon-a-prod/Data/Storage-files/Policy/Resource")).toBe("storage.files");
-    expect(conceptOf("flareon-a-prod/UserPool/Resource")).toBe("authentication");
-    expect(conceptOf("flareon-a-prod/UserPool/Domain/Resource")).toBe("authentication");
-    expect(conceptOf("flareon-a-prod/SessionSecret/Resource")).toBe("authentication");
-    expect(conceptOf("flareon-a-prod-v1/Client/Resource")).toBe("authentication");
-    expect(conceptOf("flareon-a-prod-v1/Branding")).toBe("authentication");
-    expect(conceptOf("flareon-a-preview-pr-1/PreviewToken/Resource")).toBe("authentication");
+  it("maps CDK construct paths to Flarelet concepts", () => {
+    expect(conceptOf("flarelet-a-prod/Data/Database-main/Resource")).toBe("database.main");
+    expect(conceptOf("/flarelet-a-prod/Data/Storage-files/Resource")).toBe("storage.files");
+    expect(conceptOf("/flarelet-a-prod/Data/Storage-files/Policy/Resource")).toBe("storage.files");
+    expect(conceptOf("flarelet-a-prod/UserPool/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-a-prod/UserPool/Domain/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-a-prod/SessionSecret/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-a-prod-v1/Client/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-a-prod-v1/Branding")).toBe("authentication");
+    expect(conceptOf("flarelet-a-preview-pr-1/PreviewToken/Resource")).toBe("authentication");
     for (const p of [
       "AppFunction/Resource",
       "AppFunction/ServiceRole/Resource",
@@ -21,9 +21,9 @@ describe("conceptOf", () => {
       "FrontAuthFunction/Resource",
       "FrontLogs/Resource",
     ]) {
-      expect(conceptOf(`flareon-a-prod-v1/${p}`)).toBe("application");
+      expect(conceptOf(`flarelet-a-prod-v1/${p}`)).toBe("application");
     }
-    expect(conceptOf("flareon-a-prod-v1/CDKMetadata/Default")).toBeUndefined();
+    expect(conceptOf("flarelet-a-prod-v1/CDKMetadata/Default")).toBeUndefined();
   });
 
   it("also accepts stack-relative paths (as toolkit-lib reports them)", () => {
@@ -32,7 +32,7 @@ describe("conceptOf", () => {
     expect(conceptOf("UserPool/Domain")).toBe("authentication");
     expect(conceptOf("CDKMetadata")).toBeUndefined();
     expect(
-      conceptOf("flareon-a-preview-pr-1/Custom::S3AutoDeleteObjectsCustomResourceProvider/Role"),
+      conceptOf("flarelet-a-preview-pr-1/Custom::S3AutoDeleteObjectsCustomResourceProvider/Role"),
     ).toBeUndefined();
   });
 });
@@ -45,7 +45,7 @@ const res = (path: string, props: unknown, type = "AWS::X::Y") => ({
 
 const appFn = (env: Record<string, string>, key = "k1") =>
   res(
-    "flareon-a-prod-v1/AppFunction/Resource",
+    "flarelet-a-prod-v1/AppFunction/Resource",
     { Code: { S3Key: key }, Environment: { Variables: env } },
     "AWS::Lambda::Function",
   );
@@ -53,13 +53,13 @@ const appFn = (env: Record<string, string>, key = "k1") =>
 describe("diffTemplates", () => {
   const stageNew: CfnTemplate = {
     Resources: {
-      T1: res("flareon-a-prod/Data/Database-main/Resource", { a: 1 }),
-      B1: res("flareon-a-prod/Data/Storage-files/Resource", { b: 1 }),
+      T1: res("flarelet-a-prod/Data/Database-main/Resource", { a: 1 }),
+      B1: res("flarelet-a-prod/Data/Storage-files/Resource", { b: 1 }),
     },
   };
   const verNew: CfnTemplate = {
     Resources: {
-      Fn: appFn({ FLAREON_AI_HAIKU_MODEL_ID: "x", FLAREON_SECRETS_PATH: "/p" }, "k2"),
+      Fn: appFn({ FLARELET_AI_HAIKU_MODEL_ID: "x", FLARELET_SECRETS_PATH: "/p" }, "k2"),
     },
   };
 
@@ -74,17 +74,17 @@ describe("diffTemplates", () => {
   it("classifies unchanged, changed and removed concepts", () => {
     const stagePrev: CfnTemplate = {
       Resources: {
-        T1: res("flareon-a-prod/Data/Database-main/Resource", { a: 1 }, "AWS::X::Y"),
-        T0: res("flareon-a-prod/Data/Database-legacy/Resource", { a: 0 }),
+        T1: res("flarelet-a-prod/Data/Database-main/Resource", { a: 1 }, "AWS::X::Y"),
+        T0: res("flarelet-a-prod/Data/Database-legacy/Resource", { a: 0 }),
         B1: {
-          ...res("flareon-a-prod/Data/Storage-files/Resource", { b: 1 }),
+          ...res("flarelet-a-prod/Data/Storage-files/Resource", { b: 1 }),
           Metadata: { other: 1 },
         },
       },
     };
     const verPrev: CfnTemplate = {
       Resources: {
-        Fn: appFn({ FLAREON_AI_NOVA_MICRO_MODEL_ID: "y", FLAREON_SECRETS_PATH: "/p" }, "k1"),
+        Fn: appFn({ FLARELET_AI_NOVA_MICRO_MODEL_ID: "y", FLARELET_SECRETS_PATH: "/p" }, "k1"),
       },
     };
     const s = diffTemplates([
@@ -110,7 +110,7 @@ describe("diffTemplates", () => {
 
   it("detects a property change on a stateful resource", () => {
     const prev: CfnTemplate = {
-      Resources: { T1: res("flareon-a-prod/Data/Database-main/Resource", { a: 2 }) },
+      Resources: { T1: res("flarelet-a-prod/Data/Database-main/Resource", { a: 2 }) },
     };
     const s = diffTemplates([{ next: stageNew, prev }]);
     expect(s.changed.has("database.main")).toBe(true);

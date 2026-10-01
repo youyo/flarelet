@@ -49,26 +49,26 @@ describe("dev proxy", () => {
     expect(j).toMatchObject({ method: "PUT", url: "/items?q=1", body: '{"a":1}' });
   });
 
-  it("strips client-supplied x-flareon-* headers (no identity locally by default)", async () => {
+  it("strips client-supplied x-flarelet-* headers (no identity locally by default)", async () => {
     const appPort = await echoApp();
     proxy = await startProxy({ port: 0, targetPort: appPort });
     const r = await fetch(`http://127.0.0.1:${proxy.port}/`, {
-      headers: { "x-flareon-user-email": "evil@example.com", "X-Flareon-Auth-Mode": "cognito" },
+      headers: { "x-flarelet-user-email": "evil@example.com", "X-Flarelet-Auth-Mode": "cognito" },
     });
     const j = (await r.json()) as { headers: Record<string, string> };
-    expect(Object.keys(j.headers).filter((k) => k.startsWith("x-flareon-"))).toEqual([]);
+    expect(Object.keys(j.headers).filter((k) => k.startsWith("x-flarelet-"))).toEqual([]);
   });
 
   it("adds a simulated identity with --as", async () => {
     const appPort = await echoApp();
     proxy = await startProxy({ port: 0, targetPort: appPort, identity: "alice@example.com" });
     const r = await fetch(`http://127.0.0.1:${proxy.port}/`, {
-      headers: { "x-flareon-user-email": "evil@example.com" },
+      headers: { "x-flarelet-user-email": "evil@example.com" },
     });
     const j = (await r.json()) as { headers: Record<string, string> };
-    expect(j.headers["x-flareon-user-email"]).toBe("alice@example.com");
-    expect(j.headers["x-flareon-user-sub"]).toBe("dev:alice@example.com");
-    expect(j.headers["x-flareon-auth-mode"]).toBe("dev");
+    expect(j.headers["x-flarelet-user-email"]).toBe("alice@example.com");
+    expect(j.headers["x-flarelet-user-sub"]).toBe("dev:alice@example.com");
+    expect(j.headers["x-flarelet-auth-mode"]).toBe("dev");
   });
 
   it("waits for an app that is (re)starting", async () => {

@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 const ENV = {
   ...process.env,
-  FLAREON_SKIP_BUNDLING: "1",
-  FLAREON_OFFLINE: "1",
+  FLARELET_SKIP_BUNDLING: "1",
+  FLARELET_OFFLINE: "1",
   AWS_REGION: "ap-northeast-1",
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
   AWS_SECRET_ACCESS_KEY: "invalid",
@@ -33,7 +33,7 @@ function run(args: string[], cwd: string) {
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-idp-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-idp-"));
   await mkdir(join(dir, "app"));
   await writeFile(join(dir, "app", "main.py"), "app = None\n");
   await writeFile(join(dir, "app", "requirements.txt"), "uvicorn\n");
@@ -47,24 +47,24 @@ const yaml = (auth: string) =>
 
 type Tpl = { Resources: Record<string, { Type: string; Properties: Record<string, unknown> }> };
 const template = async (stack: string): Promise<Tpl> =>
-  JSON.parse(await readFile(join(dir, ".flareon", "out", `${stack}.template.json`), "utf8"));
+  JSON.parse(await readFile(join(dir, ".flarelet", "out", `${stack}.template.json`), "utf8"));
 const ofType = (t: Tpl, type: string) => Object.values(t.Resources).filter((r) => r.Type === type);
 
 describe("external identity providers (synth)", () => {
   it("google: the stage stack federates Google via Secrets Manager references", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: google\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: google\n"));
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
 
-    const stage = await template("flareon-idpapp-prod");
+    const stage = await template("flarelet-idpapp-prod");
     const [idp] = ofType(stage, "AWS::Cognito::UserPoolIdentityProvider");
     expect(idp?.Properties.ProviderType).toBe("Google");
     const details = idp?.Properties.ProviderDetails as Record<string, string>;
     expect(details.client_id).toBe(
-      "{{resolve:secretsmanager:flareon/idpapp/prod/auth/GOOGLE_CLIENT_ID:SecretString:::}}",
+      "{{resolve:secretsmanager:flarelet/idpapp/prod/auth/GOOGLE_CLIENT_ID:SecretString:::}}",
     );
     expect(details.client_secret).toBe(
-      "{{resolve:secretsmanager:flareon/idpapp/prod/auth/GOOGLE_CLIENT_SECRET:SecretString:::}}",
+      "{{resolve:secretsmanager:flarelet/idpapp/prod/auth/GOOGLE_CLIENT_SECRET:SecretString:::}}",
     );
     expect(idp?.Properties.AttributeMapping).toEqual({
       email: "email",
@@ -74,20 +74,20 @@ describe("external identity providers (synth)", () => {
     const [pool] = ofType(stage, "AWS::Cognito::UserPool");
     expect(pool?.Properties.Schema).toContainEqual(expect.objectContaining({ Name: "hd" }));
 
-    const version = await template("flareon-idpapp-prod-v1");
+    const version = await template("flarelet-idpapp-prod-v1");
     const [client] = ofType(version, "AWS::Cognito::UserPoolClient");
     expect(client?.Properties.SupportedIdentityProviders).toEqual(["Google"]);
   });
 
-  it("oidc: issuer and display name come from flareon.yaml", async () => {
+  it("oidc: issuer and display name come from flarelet.yaml", async () => {
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       yaml("    provider: oidc\n    issuer: https://login.example.com\n    name: Corp\n"),
     );
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
     const [idp] = ofType(
-      await template("flareon-idpapp-prod"),
+      await template("flarelet-idpapp-prod"),
       "AWS::Cognito::UserPoolIdentityProvider",
     );
     expect(idp?.Properties.ProviderType).toBe("OIDC");
@@ -96,7 +96,7 @@ describe("external identity providers (synth)", () => {
       "https://login.example.com",
     );
     const [client] = ofType(
-      await template("flareon-idpapp-prod-v1"),
+      await template("flarelet-idpapp-prod-v1"),
       "AWS::Cognito::UserPoolClient",
     );
     expect(client?.Properties.SupportedIdentityProviders).toEqual(["Corp"]);
@@ -105,13 +105,13 @@ describe("external identity providers (synth)", () => {
   it("entra: single-tenant OIDC with the tenant-specific issuer", async () => {
     const tenant = "72f988bf-86f1-41af-91ab-2d7cd011db47";
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       yaml(`    provider: entra\n    tenant: ${tenant}\n    allow: { domains: [contoso.com] }\n`),
     );
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
     const [idp] = ofType(
-      await template("flareon-idpapp-prod"),
+      await template("flarelet-idpapp-prod"),
       "AWS::Cognito::UserPoolIdentityProvider",
     );
     expect(idp?.Properties.ProviderType).toBe("OIDC");
@@ -119,30 +119,30 @@ describe("external identity providers (synth)", () => {
     const details = idp?.Properties.ProviderDetails as Record<string, string>;
     expect(details.oidc_issuer).toBe(`https://login.microsoftonline.com/${tenant}/v2.0`);
     expect(details.client_secret).toBe(
-      "{{resolve:secretsmanager:flareon/idpapp/prod/auth/ENTRA_CLIENT_SECRET:SecretString:::}}",
+      "{{resolve:secretsmanager:flarelet/idpapp/prod/auth/ENTRA_CLIENT_SECRET:SecretString:::}}",
     );
-    const version = await template("flareon-idpapp-prod-v1");
+    const version = await template("flarelet-idpapp-prod-v1");
     const [client] = ofType(version, "AWS::Cognito::UserPoolClient");
     expect(client?.Properties.SupportedIdentityProviders).toEqual(["EntraID"]);
     const vars = JSON.stringify(ofType(version, "AWS::Lambda::Function"));
-    expect(vars).toContain('"FLAREON_AUTH_PROVIDER":"entra"');
-    expect(vars).toContain('"FLAREON_AUTH_ALLOW_DOMAINS":"contoso.com"');
+    expect(vars).toContain('"FLARELET_AUTH_PROVIDER":"entra"');
+    expect(vars).toContain('"FLARELET_AUTH_ALLOW_DOMAINS":"contoso.com"');
   });
 
   it("allow: the built-in Cognito sign-in passes the list to the front Lambda only", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    allow: { emails: [a@example.com] }\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    allow: { emails: [a@example.com] }\n"));
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
     const vars = JSON.stringify(
-      ofType(await template("flareon-idpapp-prod-v1"), "AWS::Lambda::Function"),
+      ofType(await template("flarelet-idpapp-prod-v1"), "AWS::Lambda::Function"),
     );
-    expect(vars).toContain('"FLAREON_AUTH_ALLOW_EMAILS":"a@example.com"');
-    const [pool] = ofType(await template("flareon-idpapp-prod"), "AWS::Cognito::UserPool");
+    expect(vars).toContain('"FLARELET_AUTH_ALLOW_EMAILS":"a@example.com"');
+    const [pool] = ofType(await template("flarelet-idpapp-prod"), "AWS::Cognito::UserPool");
     expect((pool?.Properties.Schema as { Name: string }[]).map((a) => a.Name)).toEqual(["email"]);
   });
 
   it("plan lists authentication for an external provider", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: google\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: google\n"));
     const r = await run(["plan", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout).toContain("+ authentication");
@@ -151,39 +151,39 @@ describe("external identity providers (synth)", () => {
 
 describe("external identity providers (validation)", () => {
   it("saml is rejected as not supported in v0", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: saml\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: saml\n"));
     const r = await run(["validate"], dir);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/http\.auth\.provider: "saml" is not supported in v0/);
   });
 
   it("entra without a tenant, or with a multi-tenant one, is rejected", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: entra\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: entra\n"));
     const r = await run(["validate"], dir);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/http\.auth\.tenant: is required/);
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: entra\n    tenant: common\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: entra\n    tenant: common\n"));
     const m = await run(["validate"], dir);
     expect(m.code).toBe(1);
     expect(m.stderr).toMatch(/http\.auth\.tenant: must be your own tenant/);
   });
 
   it("an empty allow is rejected", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    allow: {}\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    allow: {}\n"));
     const r = await run(["validate"], dir);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/http\.auth\.allow: must list at least one/);
   });
 
   it("oidc without issuer is rejected", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: oidc\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: oidc\n"));
     const r = await run(["validate"], dir);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/http\.auth\.issuer: is required/);
   });
 
   it("validate summarizes the provider", async () => {
-    await writeFile(join(dir, "flareon.yaml"), yaml("    provider: google\n"));
+    await writeFile(join(dir, "flarelet.yaml"), yaml("    provider: google\n"));
     const r = await run(["validate"], dir);
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout).toMatch(/authenticated \(google\)/);

@@ -1,4 +1,4 @@
-// lifetime=destroy のバケット（PR プレビュー / flareon dev）は CDK の autoDeleteObjects カスタムリソースを使う。
+// lifetime=destroy のバケット（PR プレビュー / flarelet dev）は CDK の autoDeleteObjects カスタムリソースを使う。
 // そのプロバイダ Lambda のロググループが暗黙作成されてスタック削除後に残らないよう、スタック内で明示的に作る。
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Template } from "aws-cdk-lib/assertions";

@@ -1,4 +1,4 @@
-// flareon dev のプロキシの防御: Host 検証（DNS rebinding, F3）、--as 時のクロスサイト拒否（F5）、
+// flarelet dev のプロキシの防御: Host 検証（DNS rebinding, F3）、--as 時のクロスサイト拒否（F5）、
 // セッションごとの秘密ヘッダ（F2 の多層防御）。
 import { createServer, request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -149,14 +149,14 @@ describe("dev proxy: cross-site requests with --as (CSRF)", () => {
 });
 
 describe("dev proxy: per-session secret header", () => {
-  it("adds x-flareon-dev-secret to forwarded requests and drops a client-supplied one", async () => {
+  it("adds x-flarelet-dev-secret to forwarded requests and drops a client-supplied one", async () => {
     proxy = await startProxy({ port: 0, targetPort: await echoApp(), secret: "abc123" });
     const r = await send(proxy.port, {
       host: `localhost:${proxy.port}`,
-      "x-flareon-dev-secret": "forged",
+      "x-flarelet-dev-secret": "forged",
     });
     const j = JSON.parse(r.body) as { headers: Record<string, string> };
-    expect(j.headers["x-flareon-dev-secret"]).toBe("abc123");
+    expect(j.headers["x-flarelet-dev-secret"]).toBe("abc123");
   });
 
   it("--as marks the simulated email as verified", async () => {
@@ -168,7 +168,7 @@ describe("dev proxy: per-session secret header", () => {
     });
     const r = await send(proxy.port, { host: `localhost:${proxy.port}` });
     const j = JSON.parse(r.body) as { headers: Record<string, string> };
-    expect(j.headers["x-flareon-user-email-verified"]).toBe("true");
-    expect(j.headers["x-flareon-dev-secret"]).toBe("abc123");
+    expect(j.headers["x-flarelet-user-email-verified"]).toBe("true");
+    expect(j.headers["x-flarelet-dev-secret"]).toBe("abc123");
   });
 });

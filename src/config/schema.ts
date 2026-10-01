@@ -150,7 +150,7 @@ const authObject = z
           code: "custom",
           path: ["tenant"],
           message:
-            "must be your own tenant: multi-tenant (common, organizations) and personal-account (consumers) sign-in are not supported; Flareon uses single-tenant sign-in",
+            "must be your own tenant: multi-tenant (common, organizations) and personal-account (consumers) sign-in are not supported; Flarelet uses single-tenant sign-in",
         });
       } else if (!GUID.test(t)) {
         ctx.addIssue({
@@ -264,7 +264,7 @@ const configObject = z.strictObject({
   git: git.optional(),
 });
 
-/** 外部 IdP の資格情報名は Flareon が管理する（アプリには渡さない）ので `secrets:` に宣言させない。 */
+/** 外部 IdP の資格情報名は Flarelet が管理する（アプリには渡さない）ので `secrets:` に宣言させない。 */
 export const configSchema = configObject.superRefine((c, ctx) => {
   const auth = typeof c.http === "object" ? c.http.auth : undefined;
   const provider = typeof auth === "object" ? auth.provider : undefined;
@@ -275,10 +275,10 @@ export const configSchema = configObject.superRefine((c, ctx) => {
       ctx.addIssue({
         code: "custom",
         path: ["secrets"],
-        message: `${s} is managed by http.auth.provider: ${provider}; remove it from secrets (set it with \`flareon secret set ${s}\`)`,
+        message: `${s} is managed by http.auth.provider: ${provider}; remove it from secrets (set it with \`flarelet secret set ${s}\`)`,
       });
     }
   }
 });
 
-export type FlareonConfig = z.infer<typeof configSchema>;
+export type FlareletConfig = z.infer<typeof configSchema>;

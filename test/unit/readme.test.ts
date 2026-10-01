@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createProgram } from "../../src/cli/program.js";
-import { extractFlareonCommands, findCommandProblems } from "./skill-commands.js";
+import { extractFlareletCommands, findCommandProblems } from "./skill-commands.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const EN = join(ROOT, "README.md");
@@ -33,7 +33,7 @@ describe("README", () => {
   });
 
   it("both have the CI badge", () => {
-    const badge = "![CI](https://github.com/youyo/flareon/actions/workflows/ci.yml/badge.svg)";
+    const badge = "![CI](https://github.com/youyo/flarelet/actions/workflows/ci.yml/badge.svg)";
     expect(read(EN)).toContain(badge);
     expect(read(JA)).toContain(badge);
   });
@@ -44,13 +44,13 @@ describe("README", () => {
     expect(fences(read(JA))).toBe(fences(read(EN)));
   });
 
-  it("every `flareon <cmd>` mentioned exists in the CLI", () => {
+  it("every `flarelet <cmd>` mentioned exists in the CLI", () => {
     const program = createProgram();
     for (const file of [EN, JA]) {
-      const cmds = extractFlareonCommands(read(file));
+      const cmds = extractFlareletCommands(read(file));
       expect(cmds.length).toBeGreaterThan(20);
       for (const c of cmds) {
-        expect(findCommandProblems(program, c), `${file}: flareon ${c}`).toEqual([]);
+        expect(findCommandProblems(program, c), `${file}: flarelet ${c}`).toEqual([]);
       }
     }
   });
@@ -60,7 +60,7 @@ describe("README", () => {
     for (const file of [EN, JA]) {
       const md = read(file);
       for (const c of program.commands) {
-        expect(md, `${file}: flareon ${c.name()}`).toContain(`flareon ${c.name()}`);
+        expect(md, `${file}: flarelet ${c.name()}`).toContain(`flarelet ${c.name()}`);
       }
     }
   });

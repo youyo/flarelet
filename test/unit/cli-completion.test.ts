@@ -15,17 +15,17 @@ function walk(cmd: Command, path: string[] = []): { path: string[]; cmd: Command
 }
 
 describe("generateZshCompletion", () => {
-  it("is a zsh completion script defining _flareon", () => {
-    expect(script.startsWith("#compdef flareon\n")).toBe(true);
-    expect(script).toContain("_flareon() {");
-    expect(script).toContain("compdef _flareon flareon");
+  it("is a zsh completion script defining _flarelet", () => {
+    expect(script.startsWith("#compdef flarelet\n")).toBe(true);
+    expect(script).toContain("_flarelet() {");
+    expect(script).toContain("compdef _flarelet flarelet");
   });
 
   it("contains every command (nested too) of the program", () => {
     const all = walk(program);
     expect(all.length).toBeGreaterThan(10);
     for (const { path, cmd } of all) {
-      expect(script, path.join(" ")).toContain(`_flareon_${path.join("_").replace(/-/g, "_")}()`);
+      expect(script, path.join(" ")).toContain(`_flarelet_${path.join("_").replace(/-/g, "_")}()`);
       expect(script, path.join(" ")).toContain(`'${cmd.name()}:`);
     }
     for (const p of [
@@ -79,7 +79,7 @@ describe("generateZshCompletion", () => {
   });
 
   it("escapes characters special to _arguments in descriptions", () => {
-    const p = new Command("flareon");
+    const p = new Command("flarelet");
     p.option("--x <v>", "list [a] and b: c \\ d 'quoted'");
     const s = generateZshCompletion(p);
     expect(s).toContain("\\[a\\]");
@@ -89,7 +89,7 @@ describe("generateZshCompletion", () => {
   });
 
   it("excludes hidden commands and options", () => {
-    const p = new Command("flareon");
+    const p = new Command("flarelet");
     p.command("visible").description("v");
     p.command("secretcmd", { hidden: true }).description("h");
     p.option("--shown", "s");
@@ -116,7 +116,7 @@ describe("runCompletion", () => {
   it("prints the zsh script", () => {
     const { out, io } = mk();
     expect(runCompletion("zsh", program, io)).toBe(0);
-    expect(out.join("\n")).toContain("#compdef flareon");
+    expect(out.join("\n")).toContain("#compdef flarelet");
   });
 
   it("rejects unknown shells with exit 1 and a clear message", () => {
@@ -134,7 +134,7 @@ describe("program wiring", () => {
     let help = "";
     c?.configureOutput({ writeOut: (s) => (help += s) });
     c?.outputHelp();
-    expect(help).toContain("_flareon");
+    expect(help).toContain("_flarelet");
     expect(help).toContain("eval");
   });
 

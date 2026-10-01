@@ -9,14 +9,14 @@ export interface SecretArgs extends SynthArgs {
 }
 
 /**
- * 同じ stage の全 version の app Lambda に FLAREON_SECRETS_REVISION を設定して新しいコールドスタートを強制する。
+ * 同じ stage の全 version の app Lambda に FLARELET_SECRETS_REVISION を設定して新しいコールドスタートを強制する。
  * ランチャーは起動時にだけ SSM を読むため。CFN から見るとドリフトだが、次の deploy で元に戻るだけ。
  */
 async function restartStage(cloud: Cloud, t: Target, deps: OpsDeps): Promise<void> {
   const stacks = (await cloud.listAppStacks(t.ir.name)).filter(
     (s) =>
-      s.tags["flareon:stage"] === t.deployment.stage &&
-      s.tags["flareon:version"] !== undefined &&
+      s.tags["flarelet:stage"] === t.deployment.stage &&
+      s.tags["flarelet:version"] !== undefined &&
       s.outputs.AppFunctionName !== undefined,
   );
   if (!stacks.length) {
@@ -26,17 +26,17 @@ async function restartStage(cloud: Cloud, t: Target, deps: OpsDeps): Promise<voi
   const revision = String(deps.now());
   await Promise.all(
     stacks.map((s) =>
-      cloud.updateFunctionEnv(s.outputs.AppFunctionName!, { FLAREON_SECRETS_REVISION: revision }),
+      cloud.updateFunctionEnv(s.outputs.AppFunctionName!, { FLARELET_SECRETS_REVISION: revision }),
     ),
   );
-  const versions = stacks.map((s) => s.tags["flareon:version"]!).sort();
+  const versions = stacks.map((s) => s.tags["flarelet:version"]!).sort();
   deps.io.stdout(`Restarted ${t.deployment.stage} (${versions.join(", ")}) to apply it.`);
 }
 
 function checkDeclared(t: Target, name: string, deps: OpsDeps): boolean {
   if (t.ir.secrets.includes(name)) return true;
   deps.io.stderr(
-    `Error: secret ${name} is not declared in flareon.yaml (declared: ${t.ir.secrets.join(", ") || "none"}); add it under \`secrets:\` first`,
+    `Error: secret ${name} is not declared in flarelet.yaml (declared: ${t.ir.secrets.join(", ") || "none"}); add it under \`secrets:\` first`,
   );
   return false;
 }
@@ -64,7 +64,7 @@ export async function runSecretSet(args: SecretArgs, deps: OpsDeps): Promise<num
       // 外部 IdP の資格情報: Secrets Manager に置き、次の deploy で Cognito に反映する（アプリには渡さない）
       await cloud.putSecret(idpSecretName(t.ir.name, t.deployment.stage, args.name), value);
       io.stdout(`Set ${args.name} for ${t.ir.name} (${t.deployment.stage}) sign-in`);
-      io.stdout(`Apply it with: flareon deploy --stage ${t.deployment.stage}`);
+      io.stdout(`Apply it with: flarelet deploy --stage ${t.deployment.stage}`);
       return 0;
     }
     await cloud.putParameter(`${secretsPath(t.ir.name, t.deployment.stage)}${args.name}`, value);
@@ -116,7 +116,7 @@ export async function runSecretList(args: SynthArgs, deps: OpsDeps): Promise<num
     const state = p
       ? `set${p.lastModified ? `      ${p.lastModified.toISOString()}` : ""}`
       : "not set";
-    const note = t.ir.secrets.includes(n) ? "" : "  (not declared in flareon.yaml)";
+    const note = t.ir.secrets.includes(n) ? "" : "  (not declared in flarelet.yaml)";
     deps.io.stdout(`  ${n.padEnd(width)}  ${state}${note}`);
   }
   return 0;

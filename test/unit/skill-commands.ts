@@ -1,14 +1,14 @@
 import type { Command } from "commander";
 
-/** Markdown の code span / code block から `flareon ...` のコマンド列（`flareon ` 以降）を取り出す。 */
-export function extractFlareonCommands(md: string): string[] {
+/** Markdown の code span / code block から `flarelet ...` のコマンド列（`flarelet ` 以降）を取り出す。 */
+export function extractFlareletCommands(md: string): string[] {
   const spans: string[] = [];
   for (const m of md.matchAll(/```[^\n]*\n([\s\S]*?)```/g)) spans.push(...(m[1] ?? "").split("\n"));
   const withoutBlocks = md.replace(/```[\s\S]*?```/g, "");
   for (const m of withoutBlocks.matchAll(/`([^`\n]+)`/g)) spans.push(m[1] ?? "");
   const out: string[] = [];
   for (const s of spans) {
-    for (const m of s.matchAll(/(?:^|[\s(])flareon ([a-z][^\n#>&;]*)/g)) {
+    for (const m of s.matchAll(/(?:^|[\s(])flarelet ([a-z][^\n#>&;]*)/g)) {
       out.push((m[1] ?? "").replace(/[|[\]]/g, " ").trim());
     }
   }

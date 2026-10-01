@@ -10,7 +10,7 @@ import { awsCloud } from "../../src/aws/real.js";
 
 const ROLE =
   "arn:aws:iam::123456789012:role/cdk-hnb659fds-cfn-exec-role-123456789012-ap-northeast-1";
-const ID = "arn:aws:cloudformation:ap-northeast-1:123456789012:stack/flareon-app-preview-pr-1/x";
+const ID = "arn:aws:cloudformation:ap-northeast-1:123456789012:stack/flarelet-app-preview-pr-1/x";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -40,20 +40,20 @@ function fakeCfn(stack: Record<string, unknown>) {
 
 async function runDelete(): Promise<void> {
   vi.useFakeTimers();
-  const p = awsCloud("ap-northeast-1").deleteStack("flareon-app-preview-pr-1", () => {});
+  const p = awsCloud("ap-northeast-1").deleteStack("flarelet-app-preview-pr-1", () => {});
   await vi.advanceTimersByTimeAsync(5000);
   await p;
 }
 
 describe("awsCloud().deleteStack", () => {
   it("deletes with the stack's CloudFormation service role (the cfn-exec role CDK deployed with)", async () => {
-    const deletes = fakeCfn({ StackName: "flareon-app-preview-pr-1", RoleARN: ROLE });
+    const deletes = fakeCfn({ StackName: "flarelet-app-preview-pr-1", RoleARN: ROLE });
     await runDelete();
     expect(deletes).toEqual([{ StackName: ID, RoleARN: ROLE }]);
   });
 
   it("deletes without a role when the stack has none", async () => {
-    const deletes = fakeCfn({ StackName: "flareon-app-preview-pr-1" });
+    const deletes = fakeCfn({ StackName: "flarelet-app-preview-pr-1" });
     await runDelete();
     expect(deletes).toEqual([{ StackName: ID }]);
   });

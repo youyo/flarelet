@@ -26,7 +26,7 @@ describe("router (cognito)", () => {
     )(makeEvent({ rawPath: "/a/b", rawQueryString: "x=1", headers: { accept: "text/html" } }));
     expect(res.statusCode).toBe(302);
     expect(res.headers!.location).toBe(
-      `/__flareon/auth/login?return_to=${encodeURIComponent("/a/b?x=1")}`,
+      `/__flarelet/auth/login?return_to=${encodeURIComponent("/a/b?x=1")}`,
     );
     expect(deps.invocations).toHaveLength(0);
   });
@@ -39,7 +39,7 @@ describe("router (cognito)", () => {
     const b = await h(makeEvent({ method: "POST", headers: { accept: "text/html" } }));
     expect(b.statusCode).toBe(401);
   });
-  it("認証済みは app へ Invoke し応答を返す（x-flareon-* 偽装は無効）", async () => {
+  it("認証済みは app へ Invoke し応答を返す（x-flarelet-* 偽装は無効）", async () => {
     const deps = await makeDeps();
     deps.setInvoke(async () => ({
       payload: JSON.stringify({ statusCode: 200, body: "hi", cookies: ["c=1"] }),
@@ -50,13 +50,13 @@ describe("router (cognito)", () => {
     )(
       makeEvent({
         cookies: [sessionCookie("cognito")],
-        headers: { "x-flareon-user-sub": "evil" },
+        headers: { "x-flarelet-user-sub": "evil" },
       }),
     );
     expect(res).toEqual({ statusCode: 200, body: "hi", cookies: ["c=1"] });
     const sent = JSON.parse(deps.invocations[0]!.payload);
-    expect(sent.headers["x-flareon-user-sub"]).toBe("u1");
-    expect(sent.headers["x-flareon-auth-mode"]).toBe("cognito");
+    expect(sent.headers["x-flarelet-user-sub"]).toBe("u1");
+    expect(sent.headers["x-flarelet-auth-mode"]).toBe("cognito");
   });
   it("preview モードのセッションは cognito では無効", async () => {
     const deps = await makeDeps();
@@ -66,12 +66,12 @@ describe("router (cognito)", () => {
     )(makeEvent({ cookies: [sessionCookie("preview")], headers: { accept: "application/json" } }));
     expect(res.statusCode).toBe(401);
   });
-  it("未知の /__flareon/auth/* は 404 で app へ流さない", async () => {
+  it("未知の /__flarelet/auth/* は 404 で app へ流さない", async () => {
     const deps = await makeDeps();
     const res = await createHandler(
       COGNITO_ENV,
       deps,
-    )(makeEvent({ rawPath: "/__flareon/auth/unknown", cookies: [sessionCookie("cognito")] }));
+    )(makeEvent({ rawPath: "/__flarelet/auth/unknown", cookies: [sessionCookie("cognito")] }));
     expect(res.statusCode).toBe(404);
     expect(deps.invocations).toHaveLength(0);
   });
@@ -94,7 +94,7 @@ describe("router (preview)", () => {
     const deps = await makeDeps();
     await createHandler(PREVIEW_ENV, deps)(makeEvent({ cookies: [sessionCookie("preview")] }));
     const sent = JSON.parse(deps.invocations[0]!.payload);
-    expect(sent.headers["x-flareon-auth-mode"]).toBe("preview");
+    expect(sent.headers["x-flarelet-auth-mode"]).toBe("preview");
   });
 });
 

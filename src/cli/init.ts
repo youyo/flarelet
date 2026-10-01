@@ -36,8 +36,8 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
     return 1;
   }
   const dir = resolve(args.dir);
-  if (existsSync(join(dir, "flareon.yaml"))) {
-    io.stderr(`Error: ${join(dir, "flareon.yaml")} already exists`);
+  if (existsSync(join(dir, "flarelet.yaml"))) {
+    io.stderr(`Error: ${join(dir, "flarelet.yaml")} already exists`);
     return 1;
   }
 
@@ -51,19 +51,19 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
 
   const gi = join(dir, ".gitignore");
   const current = existsSync(gi) ? await readFile(gi, "utf8") : "";
-  if (!current.split("\n").some((l) => l.trim() === ".flareon/")) {
+  if (!current.split("\n").some((l) => l.trim() === ".flarelet/")) {
     const prefix = current === "" || current.endsWith("\n") ? "" : "\n";
-    await appendFile(gi, `${prefix}.flareon/\n`);
+    await appendFile(gi, `${prefix}.flarelet/\n`);
   }
 
   const wfTarget = join(dir, WORKFLOW_PATH);
   const wfExists = existsSync(wfTarget);
   if (!wfExists) {
     await mkdir(dirname(wfTarget), { recursive: true });
-    // 作った flareon.yaml の git 設定から生成する（push トリガーを resolver と一致させる）
-    const yaml = files.find((f) => f.path === "flareon.yaml")?.content ?? "";
+    // 作った flarelet.yaml の git 設定から生成する（push トリガーを resolver と一致させる）
+    const yaml = files.find((f) => f.path === "flarelet.yaml")?.content ?? "";
     const parsed = parseConfig(yaml);
-    if (!parsed.ok) throw new Error("internal error: the scaffolded flareon.yaml is invalid");
+    if (!parsed.ok) throw new Error("internal error: the scaffolded flarelet.yaml is invalid");
     const ir = toIR(parsed.config);
     await writeFile(
       wfTarget,
@@ -77,14 +77,14 @@ export async function runInit(args: InitArgs, io: Io): Promise<number> {
   io.stdout("");
   io.stdout("Next steps:");
   if (runtime === "typescript") io.stdout("  (cd app && npm install)");
-  io.stdout("  flareon validate");
-  io.stdout("  flareon synth --stage prod --version v1");
+  io.stdout("  flarelet validate");
+  io.stdout("  flarelet synth --stage prod --version v1");
   io.stdout("");
   io.stdout("GitHub Actions (PR previews and deploys):");
-  io.stdout("  flareon bootstrap github --repo <owner>/<name>");
-  io.stdout("  gh variable set FLAREON_AWS_ROLE_ARN --body <role arn printed above>");
-  io.stdout("  gh variable set FLAREON_AWS_REGION --body <region>");
+  io.stdout("  flarelet bootstrap github --repo <owner>/<name>");
+  io.stdout("  gh variable set FLARELET_AWS_ROLE_ARN --body <role arn printed above>");
+  io.stdout("  gh variable set FLARELET_AWS_REGION --body <region>");
   io.stdout("");
-  io.stdout("AI coding agents (Claude Code etc.): flareon skill install");
+  io.stdout("AI coding agents (Claude Code etc.): flarelet skill install");
   return 0;
 }

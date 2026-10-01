@@ -1,5 +1,5 @@
 /**
- * CloudFormation / CDK の語彙を Flareon の概念（`database.main`、`authentication` 等）に畳む。
+ * CloudFormation / CDK の語彙を Flarelet の概念（`database.main`、`authentication` 等）に畳む。
  * plan の差分表示と deploy の進捗表示で共有する。AWS には接続しない。
  */
 
@@ -37,13 +37,13 @@ const APPLICATION = new Set([
 ]);
 
 /**
- * CDK のコンストラクトパスを Flareon の概念キーにする。対応しなければ undefined。
+ * CDK のコンストラクトパスを Flarelet の概念キーにする。対応しなければ undefined。
  * テンプレートの `aws:cdk:path` は `<stack>/<id>/...`、toolkit-lib の進捗はスタック相対（`<id>/...`）。
- * Flareon のスタック名は必ず `flareon-` で始まり、コンストラクト ID は始まらないので区別できる。
+ * Flarelet のスタック名は必ず `flarelet-` で始まり、コンストラクト ID は始まらないので区別できる。
  */
 function segments(constructPath: string): string[] {
   const parts = constructPath.replace(/^\/+/, "").split("/");
-  if (parts[0]?.startsWith("flareon-")) parts.shift();
+  if (parts[0]?.startsWith("flarelet-")) parts.shift();
   return parts;
 }
 
@@ -74,9 +74,9 @@ function envConcepts(r: CfnResource, path: string | undefined): string[] {
   if (!vars) return [];
   const out: string[] = [];
   for (const k of Object.keys(vars)) {
-    const m = /^FLAREON_AI_(.+)_MODEL_ID$/.exec(k);
+    const m = /^FLARELET_AI_(.+)_MODEL_ID$/.exec(k);
     if (m) out.push(`ai.${m[1]!.toLowerCase().replace(/_/g, "-")}`);
-    if (k === "FLAREON_SECRETS_PATH") out.push("secrets");
+    if (k === "FLARELET_SECRETS_PATH") out.push("secrets");
   }
   return out;
 }

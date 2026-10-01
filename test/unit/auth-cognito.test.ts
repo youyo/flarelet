@@ -21,7 +21,7 @@ async function startLogin(returnTo?: string) {
   const handler = createHandler(COGNITO_ENV, deps);
   const res = await handler(
     makeEvent({
-      rawPath: "/__flareon/auth/login",
+      rawPath: "/__flarelet/auth/login",
       rawQueryString: returnTo === undefined ? "" : `return_to=${encodeURIComponent(returnTo)}`,
     }),
   );
@@ -36,7 +36,7 @@ describe("cognito login", () => {
     expect(loc.origin + loc.pathname).toBe(`${COGNITO_DOMAIN}/oauth2/authorize`);
     expect(loc.searchParams.get("response_type")).toBe("code");
     expect(loc.searchParams.get("client_id")).toBe(CLIENT_ID);
-    expect(loc.searchParams.get("redirect_uri")).toBe(`https://${HOST}/__flareon/auth/callback`);
+    expect(loc.searchParams.get("redirect_uri")).toBe(`https://${HOST}/__flarelet/auth/callback`);
     expect(loc.searchParams.get("scope")).toBe("openid email profile");
     expect(loc.searchParams.get("code_challenge_method")).toBe("S256");
     const flow = cookieValue(res.cookies, FLOW_COOKIE)!;
@@ -49,9 +49,9 @@ describe("cognito login", () => {
     const flowCookie = res.cookies!.find((c) => c.startsWith(`${FLOW_COOKIE}=`))!;
     expect(flowCookie).toContain("HttpOnly");
     expect(flowCookie).toContain("Secure");
-    // Path を /__flareon/auth に絞るので __Host- は使えない。__Secure- で Secure を強制する
-    expect(FLOW_COOKIE).toBe("__Secure-flareon_flow");
-    expect(flowCookie).toContain("Path=/__flareon/auth");
+    // Path を /__flarelet/auth に絞るので __Host- は使えない。__Secure- で Secure を強制する
+    expect(FLOW_COOKIE).toBe("__Secure-flarelet_flow");
+    expect(flowCookie).toContain("Path=/__flarelet/auth");
     expect(flowCookie).not.toMatch(/Domain=/i);
   });
   it.each([
@@ -85,7 +85,7 @@ describe("cognito callback", () => {
     const cb = (q: string, cookie = `${FLOW_COOKIE}=${flow}`) =>
       handler(
         makeEvent({
-          rawPath: "/__flareon/auth/callback",
+          rawPath: "/__flarelet/auth/callback",
           rawQueryString: q,
           cookies: [cookie],
         }),
@@ -113,7 +113,7 @@ describe("cognito callback", () => {
     expect(body.get("code")).toBe("CODE");
     expect(body.get("client_id")).toBe(CLIENT_ID);
     expect(body.get("code_verifier")).toBe(verifier);
-    expect(body.get("redirect_uri")).toBe(`https://${HOST}/__flareon/auth/callback`);
+    expect(body.get("redirect_uri")).toBe(`https://${HOST}/__flarelet/auth/callback`);
   });
   it("state 不一致は 400 で fetch しない", async () => {
     const { deps, cb } = await callbackSetup();
@@ -157,7 +157,7 @@ describe("cognito logout", () => {
     const res = await createHandler(
       COGNITO_ENV,
       deps,
-    )(makeEvent({ rawPath: "/__flareon/auth/logout" }));
+    )(makeEvent({ rawPath: "/__flarelet/auth/logout" }));
     expect(res.statusCode).toBe(302);
     const loc = new URL(res.headers!.location!);
     expect(loc.origin + loc.pathname).toBe(`${COGNITO_DOMAIN}/logout`);
@@ -171,10 +171,10 @@ describe("cognito login with an external identity provider", () => {
   it("skips the provider chooser with identity_provider when configured", async () => {
     const deps = await makeDeps();
     const handler = createHandler(
-      { ...COGNITO_ENV, FLAREON_COGNITO_IDENTITY_PROVIDER: "Google" },
+      { ...COGNITO_ENV, FLARELET_COGNITO_IDENTITY_PROVIDER: "Google" },
       deps,
     );
-    const res = await handler(makeEvent({ rawPath: "/__flareon/auth/login" }));
+    const res = await handler(makeEvent({ rawPath: "/__flarelet/auth/login" }));
     const loc = new URL(res.headers!.location!);
     expect(loc.searchParams.get("identity_provider")).toBe("Google");
   });

@@ -12,7 +12,7 @@ import {
   type Deployment,
   type GitRef,
 } from "../resolver/index.js";
-import { effectiveAuth, type FlareonIR } from "../ir/index.js";
+import { effectiveAuth, type FlareletIR } from "../ir/index.js";
 import { idpSecretState, needsIdpSecrets } from "./idp.js";
 import { loadIR } from "./load.js";
 import type { Io } from "./validate.js";
@@ -51,7 +51,7 @@ const DEFAULT_REGION = "us-east-1";
 async function deploymentFor(
   args: SynthArgs,
   git: SynthDeps["detectGit"],
-  ir: FlareonIR,
+  ir: FlareletIR,
 ): Promise<{ deployment: Deployment; source: string | undefined }> {
   const explicit = args.stage !== undefined && args.version !== undefined;
   let info: GitInfo = {};
@@ -89,9 +89,9 @@ export const regionOf = (
   env.CDK_DEFAULT_REGION ??
   DEFAULT_REGION;
 
-/** flareon.yaml を読み、Git / 引数からデプロイ先（stage/version）とリージョンを決める。 */
+/** flarelet.yaml を読み、Git / 引数からデプロイ先（stage/version）とリージョンを決める。 */
 export interface Target {
-  ir: FlareonIR;
+  ir: FlareletIR;
   deployment: Deployment;
   region: string;
   appDir: string;
@@ -124,7 +124,7 @@ export interface Synthesized {
   appName: string;
   deployment: Deployment;
   result: SynthResult;
-  ir: FlareonIR;
+  ir: FlareletIR;
   outdir: string;
   appDir: string;
 }
@@ -138,9 +138,9 @@ export async function synthAll(
   const t = target ?? (await resolveTarget(args, deps));
   if (!t) return null;
   const { ir, deployment, region, appDir } = t;
-  const outdir = join(appDir, ".flareon", "out");
+  const outdir = join(appDir, ".flarelet", "out");
   const account = args.account ?? deps.env.CDK_DEFAULT_ACCOUNT;
-  const skipBundling = ["1", "true"].includes(deps.env.FLAREON_SKIP_BUNDLING ?? "");
+  const skipBundling = ["1", "true"].includes(deps.env.FLARELET_SKIP_BUNDLING ?? "");
 
   let result: SynthResult;
   try {
@@ -160,9 +160,9 @@ export async function synthAll(
     return null;
   }
 
-  await mkdir(join(appDir, ".flareon"), { recursive: true });
+  await mkdir(join(appDir, ".flarelet"), { recursive: true });
   await writeFile(
-    join(appDir, ".flareon", "metadata.json"),
+    join(appDir, ".flarelet", "metadata.json"),
     JSON.stringify(
       {
         app: ir.name,
@@ -218,7 +218,7 @@ export async function runPlan(
       const st = await idpSecretState(cloud, t.ir, t.deployment);
       if (st.missing.length) {
         deps.io.stderr(
-          `Warning: ${st.missing.join(", ")} not set for ${t.deployment.stage}; deploy will fail until set (flareon secret set <name> --stage ${t.deployment.stage})`,
+          `Warning: ${st.missing.join(", ")} not set for ${t.deployment.stage}; deploy will fail until set (flarelet secret set <name> --stage ${t.deployment.stage})`,
         );
       } else idpSecretVersions = st.versions;
     } catch (e) {

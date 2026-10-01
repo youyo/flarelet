@@ -15,7 +15,7 @@ const IGNORED = new Set([
   "node_modules",
   ".pytest_cache",
   ".mypy_cache",
-  ".flareon",
+  ".flarelet",
 ]);
 
 export interface StageAppOptions {
@@ -34,7 +34,7 @@ function writeLauncher(dir: string, language: RuntimeLanguage): void {
 }
 
 const nodeBanner =
-  "import { createRequire as __flareonCreateRequire } from 'node:module';const require = __flareonCreateRequire(import.meta.url);";
+  "import { createRequire as __flareletCreateRequire } from 'node:module';const require = __flareletCreateRequire(import.meta.url);";
 
 /** Lambda 向け: AWS SDK v3 はランタイム同梱なので外部扱い。 */
 function esbuildToMjs(entry: string, outfile: string, external: string[] = ["@aws-sdk/*"]): void {
@@ -147,7 +147,7 @@ export function frontAuthCode(cacheDir: string): lambda.Code {
 }
 
 /**
- * `flareon dev` 向け: app/index.ts を依存ごと 1 ファイルにバンドルする（本番と同じ esbuild 経路）。
+ * `flarelet dev` 向け: app/index.ts を依存ごと 1 ファイルにバンドルする（本番と同じ esbuild 経路）。
  * ローカルには AWS SDK が同梱されていないので、アプリの node_modules から取り込む。
  */
 export function bundleDevApp(entry: string, outfile: string): void {

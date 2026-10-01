@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
-// `flareon dev` の実 AWS E2E 用アプリ。ローカルで動き、Flareon のバインディングで実テーブルに書き込む。
+// `flarelet dev` の実 AWS E2E 用アプリ。ローカルで動き、Flarelet のバインディングで実テーブルに書き込む。
 const ddb = new DynamoDBClient({});
-const table = process.env.FLAREON_DATABASE_MAIN_TABLE;
+const table = process.env.FLARELET_DATABASE_MAIN_TABLE;
 
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -38,7 +38,7 @@ createServer((req, res) => {
   }
   send(200, {
     table,
-    version: process.env.FLAREON_VERSION,
-    bucket: process.env.FLAREON_STORAGE_FILES_BUCKET,
+    version: process.env.FLARELET_VERSION,
+    bucket: process.env.FLARELET_STORAGE_FILES_BUCKET,
   });
 }).listen(Number(process.env.PORT), process.env.HOST ?? "127.0.0.1");

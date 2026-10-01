@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml, YAMLParseError } from "yaml";
 import type { z } from "zod";
-import { configSchema, type FlareonConfig } from "./schema.js";
+import { configSchema, type FlareletConfig } from "./schema.js";
 
 export interface ConfigIssue {
   /** ドット区切りのパス。ルートは空文字。 */
@@ -10,7 +10,7 @@ export interface ConfigIssue {
 }
 
 export type ParseResult =
-  { ok: true; config: FlareonConfig } | { ok: false; issues: ConfigIssue[] };
+  { ok: true; config: FlareletConfig } | { ok: false; issues: ConfigIssue[] };
 
 const pathOf = (p: ReadonlyArray<PropertyKey>): string => p.map(String).join(".");
 

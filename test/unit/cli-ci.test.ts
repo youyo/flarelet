@@ -28,9 +28,9 @@ async function setup(git: GitInfo | undefined) {
 describe("--ci", () => {
   it("deploy --ci resolves the PR from the GitHub event (preview/pr-12)", async () => {
     await setup(prEvent("synchronize"));
-    h.cloud.addStack({ name: "flareon-myapp-preview-pr-12" });
+    h.cloud.addStack({ name: "flarelet-myapp-preview-pr-12" });
     h.deployer.result = [
-      { name: "flareon-myapp-preview-pr-12", outputs: { ApiUrl: "https://x/" } },
+      { name: "flarelet-myapp-preview-pr-12", outputs: { ApiUrl: "https://x/" } },
     ];
     expect(await runDeploy({ file: h.file, ci: true }, h.deps)).toBe(0);
     expect(h.out.join("\n")).toContain("Deploying myapp (preview/pr-12)");
@@ -45,16 +45,16 @@ describe("--ci", () => {
 
   it("destroy --ci removes the preview of a closed pull request", async () => {
     await setup(prEvent("closed"));
-    h.cloud.addStack({ name: "flareon-myapp-preview-pr-12" });
+    h.cloud.addStack({ name: "flarelet-myapp-preview-pr-12" });
     expect(await runDestroy({ file: h.file, ci: true }, h.deps)).toBe(0);
-    expect(h.cloud.calls).toContain("deleteStack:flareon-myapp-preview-pr-12");
+    expect(h.cloud.calls).toContain("deleteStack:flarelet-myapp-preview-pr-12");
   });
 
   it("destroy --ci refuses an open pull request", async () => {
     await setup(prEvent("synchronize"));
     expect(await runDestroy({ file: h.file, ci: true }, h.deps)).toBe(1);
     expect(h.err.join("\n")).toMatch(/closed pull request/);
-    expect(h.cloud.calls).not.toContain("deleteStack:flareon-myapp-preview-pr-12");
+    expect(h.cloud.calls).not.toContain("deleteStack:flarelet-myapp-preview-pr-12");
   });
 
   it("destroy --ci refuses push events", async () => {

@@ -13,7 +13,7 @@ afterEach(async () => h?.cleanup());
 
 async function withPool() {
   h = await harness(YAML);
-  h.cloud.addStack({ name: "flareon-myapp-prod", outputs: { UserPoolId: "pool-1" } });
+  h.cloud.addStack({ name: "flarelet-myapp-prod", outputs: { UserPoolId: "pool-1" } });
 }
 
 describe("auth user", () => {
@@ -61,7 +61,7 @@ name: myapp
 runtime: { language: python }
 http: { auth: { provider: google } }
 `);
-    h.cloud.addStack({ name: "flareon-myapp-prod", outputs: { UserPoolId: "pool-1" } });
+    h.cloud.addStack({ name: "flarelet-myapp-prod", outputs: { UserPoolId: "pool-1" } });
     expect(await runUserAdd({ file: h.file, stage: "prod", email: "a@example.com" }, h.deps)).toBe(
       0,
     );

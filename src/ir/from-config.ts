@@ -1,10 +1,10 @@
-import type { FlareonConfig } from "../config/index.js";
-import type { AuthIR, FlareonIR, HttpIR } from "./types.js";
+import type { FlareletConfig } from "../config/index.js";
+import type { AuthIR, FlareletIR, HttpIR } from "./types.js";
 
 export const DEFAULT_RUNTIME_VERSION = { python: "3.13", typescript: "24" } as const;
 
 function toAuth(
-  auth: NonNullable<Extract<FlareonConfig["http"], object>["auth"]> | undefined,
+  auth: NonNullable<Extract<FlareletConfig["http"], object>["auth"]> | undefined,
 ): AuthIR {
   if (auth === false) return { enabled: false };
   if (auth === undefined || auth === true) return { enabled: true, provider: "cognito" };
@@ -38,7 +38,7 @@ function toAuth(
   return { enabled: true, provider: p, ...allow };
 }
 
-function toHttp(http: FlareonConfig["http"]): HttpIR | null {
+function toHttp(http: FlareletConfig["http"]): HttpIR | null {
   if (http === undefined || http === false) return null;
   if (http === true) return { auth: toAuth(undefined) };
   return { auth: toAuth(http.auth) };
@@ -49,7 +49,7 @@ const names = (r: Record<string, unknown> | undefined) =>
     .sort()
     .map((name) => ({ name }));
 
-export function toIR(c: FlareonConfig): FlareonIR {
+export function toIR(c: FlareletConfig): FlareletIR {
   return {
     version: 1,
     name: c.name,

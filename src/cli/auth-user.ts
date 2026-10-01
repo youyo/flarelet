@@ -34,7 +34,7 @@ async function userPool(
   const names = stackNames(t.ir.name, t.deployment);
   if (names.stage === undefined) {
     io.stderr(
-      `Error: PR previews use a preview token instead of users; open it with \`flareon env url --pr ${t.deployment.version.replace(/^pr-/, "")} --with-token\``,
+      `Error: PR previews use a preview token instead of users; open it with \`flarelet env url --pr ${t.deployment.version.replace(/^pr-/, "")} --with-token\``,
     );
     return null;
   }
@@ -46,7 +46,7 @@ async function userPool(
   const pool = (await cloud.describeStack(names.stage))?.outputs.UserPoolId;
   if (!pool) {
     io.stderr(
-      `Error: ${t.ir.name} (${t.deployment.stage}) is not deployed yet; run flareon deploy`,
+      `Error: ${t.ir.name} (${t.deployment.stage}) is not deployed yet; run flarelet deploy`,
     );
     return null;
   }
@@ -116,14 +116,14 @@ export async function runUserRemove(args: UserArgs, deps: OpsDeps): Promise<numb
       return 1;
     }
     deps.io.stdout(`Removed ${args.email} from ${p.stage}`);
-    // 削除したユーザーの Flareon セッション（Cookie、最長 8 時間）も止める。全員のセッションが失効する
+    // 削除したユーザーの Flarelet セッション（Cookie、最長 8 時間）も止める。全員のセッションが失効する
     if (await p.cloud.rotateParameter(p.epochParam)) {
       deps.io.stdout(
         `Signed out every session of ${p.stage} (takes effect within ${EPOCH_DELAY}); other users sign in again`,
       );
     } else {
       deps.io.stderr(
-        `Warning: ${p.stage} was deployed before session revocation existed, so existing sessions stay valid until they expire; run flareon deploy`,
+        `Warning: ${p.stage} was deployed before session revocation existed, so existing sessions stay valid until they expire; run flarelet deploy`,
       );
     }
     return 0;
@@ -134,7 +134,7 @@ export async function runUserRemove(args: UserArgs, deps: OpsDeps): Promise<numb
 }
 
 /**
- * `flareon auth revoke-sessions`: その環境の Flareon セッション（Cookie）をすべて失効させる。
+ * `flarelet auth revoke-sessions`: その環境の Flarelet セッション（Cookie）をすべて失効させる。
  * セッション世代（SSM パラメータ）を書き換え、front Lambda がキャッシュを更新した時点（最大 60 秒）で効く。
  */
 export async function runRevokeSessions(args: SynthArgs, deps: OpsDeps): Promise<number> {
@@ -151,7 +151,7 @@ export async function runRevokeSessions(args: SynthArgs, deps: OpsDeps): Promise
     const name = sessionEpochParam(t.ir.name, t.deployment);
     if (!(await deps.cloud(t.region).rotateParameter(name))) {
       io.stderr(
-        `Error: ${t.ir.name} (${label}) is not deployed, or was deployed before session revocation existed; run flareon deploy`,
+        `Error: ${t.ir.name} (${label}) is not deployed, or was deployed before session revocation existed; run flarelet deploy`,
       );
       return 1;
     }

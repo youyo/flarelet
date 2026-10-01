@@ -1,5 +1,5 @@
 /**
- * Flareon AI model registry: 論理名 → Bedrock の推論プロファイル ID / 基盤モデル ID。
+ * Flarelet AI model registry: 論理名 → Bedrock の推論プロファイル ID / 基盤モデル ID。
  *
  * ID は AWS 公式ドキュメント（Amazon Bedrock の Models at a glance → 各モデルカード）で確認:
  *  - https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5-5.html
@@ -38,7 +38,7 @@ export const isKnownModel = (name: string): boolean => Object.hasOwn(REGISTRY, n
 
 export interface ResolvedModel {
   name: string;
-  /** InvokeModel に渡す推論プロファイル ID（`FLAREON_AI_<NAME>_MODEL_ID` の値）。 */
+  /** InvokeModel に渡す推論プロファイル ID（`FLARELET_AI_<NAME>_MODEL_ID` の値）。 */
   profileId: string;
   foundationModelId: string;
 }

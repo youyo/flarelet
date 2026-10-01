@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import type { Io } from "./validate.js";
 
 /** 実体（エージェント共通の置き場）とリンク（Claude Code 用）の、ルートからの相対パス。 */
-const ENTITY_REL = join(".agents", "skills", "flareon");
-const LINK_REL = join(".claude", "skills", "flareon");
+const ENTITY_REL = join(".agents", "skills", "flarelet");
+const LINK_REL = join(".claude", "skills", "flarelet");
 
-/** パッケージ同梱のスキル。src/cli/ と dist/cli/ のどちらからでも `../../.agents/skills/flareon`。 */
+/** パッケージ同梱のスキル。src/cli/ と dist/cli/ のどちらからでも `../../.agents/skills/flarelet`。 */
 export function defaultSkillSource(): string {
-  return fileURLToPath(new URL("../../.agents/skills/flareon", import.meta.url));
+  return fileURLToPath(new URL("../../.agents/skills/flarelet", import.meta.url));
 }
 
 export interface SkillInstallArgs {
@@ -59,7 +59,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-/** 同梱スキルを `<root>/.agents/skills/flareon/` にコピーし、`<root>/.claude/skills/flareon` から相対リンクする。 */
+/** 同梱スキルを `<root>/.agents/skills/flarelet/` にコピーし、`<root>/.claude/skills/flarelet` から相対リンクする。 */
 export async function runSkillInstall(
   args: SkillInstallArgs,
   deps: SkillInstallDeps,
@@ -109,7 +109,7 @@ export async function runSkillInstall(
     }
   }
 
-  io.stdout(`Installed the flareon skill: ${entity}`);
+  io.stdout(`Installed the flarelet skill: ${entity}`);
   io.stdout(
     linked ? `  ${link} -> ${target}` : `  ${link} (copy; symbolic links are not available here)`,
   );

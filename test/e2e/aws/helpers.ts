@@ -1,4 +1,4 @@
-// 実 AWS E2E（FLAREON_E2E_AWS=1）の共通処理。テスト専用アプリ名のリソースだけを作成・削除する。
+// 実 AWS E2E（FLARELET_E2E_AWS=1）の共通処理。テスト専用アプリ名のリソースだけを作成・削除する。
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -21,7 +21,7 @@ import { DescribeSecretCommand, SecretsManagerClient } from "@aws-sdk/client-sec
 import { DeleteParameterCommand, GetParametersByPathCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { awsCloud } from "../../../src/aws/real.js";
 
-export const ENABLED = process.env.FLAREON_E2E_AWS === "1";
+export const ENABLED = process.env.FLARELET_E2E_AWS === "1";
 export const REGION = "ap-northeast-1";
 /** deploy を含むテスト・フックのタイムアウト。 */
 export const LONG = 30 * 60_000;
@@ -32,8 +32,8 @@ const FIXTURES = resolve(import.meta.dirname, "fixtures");
 const ENV: NodeJS.ProcessEnv = {
   ...process.env,
   AWS_REGION: REGION,
-  FLAREON_OFFLINE: "",
-  FLAREON_SKIP_BUNDLING: "",
+  FLARELET_OFFLINE: "",
+  FLARELET_SKIP_BUNDLING: "",
 };
 
 export const log = (msg: string): void => {
@@ -100,14 +100,14 @@ function run(cmd: string, args: string[], cwd: string): Promise<void> {
   });
 }
 
-/** フィクスチャをテンポラリにコピーし、flareon.yaml を書く。TypeScript なら依存を入れる。 */
+/** フィクスチャをテンポラリにコピーし、flarelet.yaml を書く。TypeScript なら依存を入れる。 */
 export async function prepareApp(
   fixture: "python" | "typescript" | "dev",
   yaml: string,
 ): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), `flareon-aws-${fixture}-`));
+  const dir = await mkdtemp(join(tmpdir(), `flarelet-aws-${fixture}-`));
   await cp(join(FIXTURES, fixture), dir, { recursive: true });
-  await writeFile(join(dir, "flareon.yaml"), yaml);
+  await writeFile(join(dir, "flarelet.yaml"), yaml);
   if (fixture !== "python") {
     await run("npm", ["install", "--no-audit", "--no-fund", "--silent"], join(dir, "app"));
   }
@@ -171,7 +171,7 @@ async function appStacks(app: string): Promise<{ name: string; id: string }[]> {
   do {
     const page = await cfn.send(new DescribeStacksCommand({ NextToken: token }));
     for (const s of page.Stacks ?? []) {
-      if (s.Tags?.some((t) => t.Key === "flareon:app" && t.Value === app)) {
+      if (s.Tags?.some((t) => t.Key === "flarelet:app" && t.Value === app)) {
         out.push({ name: s.StackName!, id: s.StackId! });
       }
     }
@@ -217,7 +217,7 @@ export async function track(app: string, t: Tracked): Promise<void> {
 
 /**
  * 後始末の安全網: CLI の destroy が失敗しても、テスト用アプリのスタック・RETAIN リソース・SSM を消す。
- * 対象は flareon:app タグ（テスト専用名）と記録済みの物理 ID に限る。
+ * 対象は flarelet:app タグ（テスト専用名）と記録済みの物理 ID に限る。
  */
 export async function forceCleanup(app: string, t: Tracked): Promise<void> {
   await track(app, t).catch(() => {});
@@ -242,7 +242,7 @@ export async function forceCleanup(app: string, t: Tracked): Promise<void> {
   }
   const ssm = new SSMClient({ region: REGION });
   const params = await ssm.send(
-    new GetParametersByPathCommand({ Path: `/flareon/${app}`, Recursive: true }),
+    new GetParametersByPathCommand({ Path: `/flarelet/${app}`, Recursive: true }),
   );
   for (const p of params.Parameters ?? []) {
     await ssm.send(new DeleteParameterCommand({ Name: p.Name! }));
@@ -309,12 +309,12 @@ export async function leftovers(app: string, t: Tracked): Promise<string[]> {
   }
   // スタック外に暗黙作成される Lambda のロググループ（例: CDK の autoDeleteObjects プロバイダ）
   const implicit = await logs.send(
-    new DescribeLogGroupsCommand({ logGroupNamePrefix: `/aws/lambda/flareon-${app}-` }),
+    new DescribeLogGroupsCommand({ logGroupNamePrefix: `/aws/lambda/flarelet-${app}-` }),
   );
   for (const g of implicit.logGroups ?? []) left.push(`log group ${g.logGroupName}`);
   const ssm = new SSMClient({ region: REGION });
   const params = await ssm.send(
-    new GetParametersByPathCommand({ Path: `/flareon/${app}`, Recursive: true }),
+    new GetParametersByPathCommand({ Path: `/flarelet/${app}`, Recursive: true }),
   );
   for (const p of params.Parameters ?? []) left.push(`ssm ${p.Name}`);
   return left;

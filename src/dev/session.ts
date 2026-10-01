@@ -58,7 +58,7 @@ export async function devCommand(
   if (!existsSync(entry)) {
     throw new Error(`${entry} not found (typescript apps listen on $PORT from app/index.ts)`);
   }
-  const outfile = join(appDir, ".flareon", "dev", "app", "index.mjs");
+  const outfile = join(appDir, ".flarelet", "dev", "app", "index.mjs");
   try {
     bundleDevApp(entry, outfile);
   } catch (e) {
@@ -88,14 +88,14 @@ export function newDevSecret(): string {
 
 /**
  * アプリに渡す環境変数。HOST=127.0.0.1 でループバックだけで listen させ（TypeScript のテンプレートは HOST を読む）、
- * FLAREON_DEV_SECRET で flareon/runtime の identity() がプロキシ経由のリクエストだけを信用できるようにする。
+ * FLARELET_DEV_SECRET で flarelet/runtime の identity() がプロキシ経由のリクエストだけを信用できるようにする。
  */
 export function appEnv(
   base: Record<string, string>,
   appPort: number,
   secret: string,
 ): Record<string, string> {
-  return { ...base, PORT: String(appPort), HOST: "127.0.0.1", FLAREON_DEV_SECRET: secret };
+  return { ...base, PORT: String(appPort), HOST: "127.0.0.1", FLARELET_DEV_SECRET: secret };
 }
 
 const realSupervisorDeps: SupervisorDeps = {

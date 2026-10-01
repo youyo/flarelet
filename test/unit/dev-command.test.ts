@@ -7,7 +7,7 @@ import { appEnv, devCommand, newDevSecret } from "../../src/dev/session.js";
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-devcmd-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-devcmd-"));
   await mkdir(join(dir, "app"));
 });
 afterEach(async () => {
@@ -62,7 +62,7 @@ describe("devCommand: typescript", () => {
     const c = await devCommand("typescript", dir, 4321, { which: () => undefined });
     expect(c.cmd).toBe(process.execPath);
     expect(c.cwd).toBe(join(dir, "app"));
-    expect(c.args).toEqual([join(dir, ".flareon", "dev", "app", "index.mjs")]);
+    expect(c.args).toEqual([join(dir, ".flarelet", "dev", "app", "index.mjs")]);
     const out = await new Promise<string>((res, rej) =>
       execFile(c.cmd, c.args, { cwd: c.cwd, env: { ...process.env, PORT: "4321" } }, (e, so) =>
         e ? rej(e) : res(so),
@@ -85,7 +85,7 @@ describe("devCommand: typescript", () => {
 describe("appEnv", () => {
   it("binds the app to loopback and hands it the per-session dev secret", () => {
     const env = appEnv({ HOST: "0.0.0.0", PORT: "1", A: "b" }, 4567, "sekrit");
-    expect(env).toEqual({ A: "b", PORT: "4567", HOST: "127.0.0.1", FLAREON_DEV_SECRET: "sekrit" });
+    expect(env).toEqual({ A: "b", PORT: "4567", HOST: "127.0.0.1", FLARELET_DEV_SECRET: "sekrit" });
   });
 
   it("newDevSecret is random and long enough", () => {

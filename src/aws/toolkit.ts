@@ -1,13 +1,13 @@
 import { StackSelectionStrategy, Toolkit } from "@aws-cdk/toolkit-lib";
 import type { Deployer } from "./cloud.js";
-import { FlareonIoHost } from "./iohost.js";
+import { FlareletIoHost } from "./iohost.js";
 
 /** @aws-cdk/toolkit-lib による Deployer。スタックの依存順（stage → version）は CDK に任せる。 */
 export function toolkitDeployer(): Deployer {
   return {
     async deploy(outdir, onEvent) {
       const toolkit = new Toolkit({
-        ioHost: new FlareonIoHost(onEvent),
+        ioHost: new FlareletIoHost(onEvent),
         emojis: false,
         color: false,
       });

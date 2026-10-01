@@ -9,8 +9,8 @@ const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 // 誤って実 AWS に触れないよう、無効な認証情報と存在しないエンドポイントを与える
 const ENV = {
   ...process.env,
-  FLAREON_SKIP_BUNDLING: "1",
-  FLAREON_OFFLINE: "1",
+  FLARELET_SKIP_BUNDLING: "1",
+  FLARELET_OFFLINE: "1",
   AWS_REGION: "ap-northeast-1",
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
   AWS_SECRET_ACCESS_KEY: "invalid",
@@ -35,9 +35,9 @@ function run(args: string[], cwd: string, input?: string) {
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-ops-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-ops-"));
   await writeFile(
-    join(dir, "flareon.yaml"),
+    join(dir, "flarelet.yaml"),
     `version: 1
 name: opsapp
 runtime: { language: typescript }
@@ -74,10 +74,10 @@ describe("operational commands (no AWS)", () => {
     }
   });
 
-  it("plan stays offline with FLAREON_OFFLINE=1", async () => {
+  it("plan stays offline with FLARELET_OFFLINE=1", async () => {
     const r = await run(["plan", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout).toContain("Flareon will create opsapp (prod/v1)");
+    expect(r.stdout).toContain("Flarelet will create opsapp (prod/v1)");
     expect(r.stderr).toBe("");
   });
 

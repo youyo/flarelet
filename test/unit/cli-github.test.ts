@@ -77,7 +77,7 @@ async function setup(env: Record<string, string> = {}, prNumber: number | null =
   });
   (h.deps as GithubDeps).github = () => gh;
   h.cloud.addStack({
-    name: "flareon-myapp-preview-pr-12",
+    name: "flarelet-myapp-preview-pr-12",
     outputs: {
       ApiUrl: "https://abc.execute-api.ap-northeast-1.amazonaws.com/",
       PreviewTokenSecretArn: "arn:secret",
@@ -95,7 +95,7 @@ describe("runGithubComment", () => {
     const body = gh.comments[0]!.body;
     expect(body).toContain(commentMarker("myapp"));
     expect(body).toContain("https://abc.execute-api.ap-northeast-1.amazonaws.com");
-    expect(body).toContain("flareon env url --pr 12 --with-token");
+    expect(body).toContain("flarelet env url --pr 12 --with-token");
     expect(body).not.toContain("TOKEN123");
     expect(gh.created[0]).toMatchObject({
       ref: "abc123",
@@ -131,7 +131,7 @@ describe("runGithubComment", () => {
     expect(await runGithubComment({ file: h.file, state: "success", withToken: true }, deps)).toBe(
       0,
     );
-    expect(gh.comments[0]!.body).toContain("/__flareon/auth/preview?token=TOKEN123");
+    expect(gh.comments[0]!.body).toContain("/__flarelet/auth/preview?token=TOKEN123");
     // ログでマスクされるよう ::add-mask:: を出す
     expect(h.out.join("\n")).toContain("::add-mask::TOKEN123");
     expect(h.out.join("\n")).not.toMatch(/token=TOKEN123/);
@@ -168,7 +168,7 @@ describe("runGithubComment", () => {
   it("posts only a deployment for push events (no PR comment)", async () => {
     const deps = await setup({}, null);
     h.cloud.addStack({
-      name: "flareon-myapp-prod-current",
+      name: "flarelet-myapp-prod-current",
       outputs: { ApiUrl: "https://prod.example/" },
     });
     expect(

@@ -50,7 +50,7 @@ export interface Cloud {
   /** STS の呼び出し元アカウント ID。 */
   account(): Promise<string>;
   describeStack(name: string): Promise<StackInfo | undefined>;
-  /** `flareon:app` タグが app のスタック（削除済みを除く）。 */
+  /** `flarelet:app` タグが app のスタック（削除済みを除く）。 */
   listAppStacks(app: string): Promise<StackInfo[]>;
   /** 指定タグキーを持つスタック（削除済みを除く）。 */
   listStacksWithTag(key: string): Promise<StackInfo[]>;
@@ -72,7 +72,7 @@ export interface Cloud {
   deleteParameter(name: string): Promise<boolean>;
   /**
    * 既存の String パラメータの値を新しいランダム値に書き換える（バージョンが進む）。無ければ作らず false。
-   * セッション世代（flareon auth revoke-sessions）に使う。
+   * セッション世代（flarelet auth revoke-sessions）に使う。
    */
   rotateParameter(name: string): Promise<boolean>;
   /** 関数の環境変数に vars をマージし、更新完了まで待つ（新しいコールドスタートを強制する）。 */

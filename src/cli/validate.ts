@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { ConfigFileNotFoundError, formatIssues, loadConfigFile } from "../config/index.js";
-import { toIR, type FlareonIR } from "../ir/index.js";
+import { toIR, type FlareletIR } from "../ir/index.js";
 import { checkWorkflowDrift, WORKFLOW_PATH } from "./workflow.js";
 
 export interface Io {
@@ -10,14 +10,14 @@ export interface Io {
   stderr: (line: string) => void;
 }
 
-function httpSummary(ir: FlareonIR): string {
+function httpSummary(ir: FlareletIR): string {
   if (!ir.http) return "none";
   const a = ir.http.auth;
   if (!a.enabled) return "public (auth disabled)";
   return a.provider === "cognito" ? "authenticated" : `authenticated (${a.provider})`;
 }
 
-/** flareon.yaml を検証し、終了コードを返す。 */
+/** flarelet.yaml を検証し、終了コードを返す。 */
 export async function runValidate(
   file: string,
   io: Io,

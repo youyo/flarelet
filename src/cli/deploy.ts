@@ -142,18 +142,18 @@ export async function runDeploy(args: SynthArgs, deps: OpsDeps): Promise<number>
       io.stdout(`  Auth  preview token${eff.forced ? " (forced for pull request previews)" : ""}`);
       io.stdout("");
       io.stdout(
-        `  Open it with: flareon env url --pr ${d.version.replace(/^pr-/, "")} --with-token`,
+        `  Open it with: flarelet env url --pr ${d.version.replace(/^pr-/, "")} --with-token`,
       );
     } else if (eff.auth.provider !== "cognito") {
       io.stdout(`  Auth  sign-in with ${eff.auth.provider}`);
     } else {
       io.stdout("  Auth  sign-in required");
       io.stdout("");
-      io.stdout(`  Add a user with: flareon auth user add <email> --stage ${d.stage}`);
+      io.stdout(`  Add a user with: flarelet auth user add <email> --stage ${d.stage}`);
     }
   }
 
-  const metaFile = join(s.appDir, ".flareon", "metadata.json");
+  const metaFile = join(s.appDir, ".flarelet", "metadata.json");
   const meta = JSON.parse(await readFile(metaFile, "utf8")) as Record<string, unknown>;
   await writeFile(
     metaFile,

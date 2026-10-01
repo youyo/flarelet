@@ -1,6 +1,6 @@
-# flareon.yaml リファレンス
+# flarelet.yaml リファレンス
 
-`src/config/schema.ts`（zod、`strictObject`）から起こしたスキーマです。**未知のキーはすべてエラー**になります。迷ったら `flareon validate` で確認してください。
+`src/config/schema.ts`（zod、`strictObject`）から起こしたスキーマです。**未知のキーはすべてエラー**になります。迷ったら `flarelet validate` で確認してください。
 
 ## トップレベル
 
@@ -75,8 +75,8 @@ allow:
 | entra    | `ENTRA_CLIENT_ID` / `ENTRA_CLIENT_SECRET`   |
 
 ```bash
-flareon secret set GOOGLE_CLIENT_ID --stage prod
-flareon secret set GOOGLE_CLIENT_SECRET --stage prod
+flarelet secret set GOOGLE_CLIENT_ID --stage prod
+flarelet secret set GOOGLE_CLIENT_SECRET --stage prod
 ```
 
 ## database / storage
@@ -90,10 +90,10 @@ storage:
 
 キーはリソース名（`name` と同じ命名規則、24 文字まで）。値に指定できる項目は v0 にはなく、`{}` のみです。アプリには次の環境変数で渡ります。
 
-| 宣言              | 環境変数                        |
-| ----------------- | ------------------------------- |
-| `database.<name>` | `FLAREON_DATABASE_<NAME>_TABLE` |
-| `storage.<name>`  | `FLAREON_STORAGE_<NAME>_BUCKET` |
+| 宣言              | 環境変数                         |
+| ----------------- | -------------------------------- |
+| `database.<name>` | `FLARELET_DATABASE_<NAME>_TABLE` |
+| `storage.<name>`  | `FLARELET_STORAGE_<NAME>_BUCKET` |
 
 ## ai
 
@@ -103,7 +103,7 @@ ai:
     - sonnet
 ```
 
-`models` は論理名の配列（重複不可）。使えるのは `sonnet` / `opus` / `haiku` / `nova-micro` / `nova-lite` / `nova-pro`（`src/constructs/ai-models.ts` のレジストリ）。アプリには `FLAREON_AI_<NAME>_MODEL_ID` で解決済みのモデル ID が渡ります。
+`models` は論理名の配列（重複不可）。使えるのは `sonnet` / `opus` / `haiku` / `nova-micro` / `nova-lite` / `nova-pro`（`src/constructs/ai-models.ts` のレジストリ）。アプリには `FLARELET_AI_<NAME>_MODEL_ID` で解決済みのモデル ID が渡ります。
 
 ## secrets
 
@@ -112,7 +112,7 @@ secrets:
   - EXTERNAL_API_KEY
 ```
 
-環境変数名の形式（`A-Z`・`0-9`・`_`、英大文字始まり）。重複不可。`FLAREON_` と `AWS_` で始まる名前は予約済みで使えません。宣言した名前がそのまま環境変数としてアプリに渡ります。値は `flareon secret set <name>` で設定します。
+環境変数名の形式（`A-Z`・`0-9`・`_`、英大文字始まり）。重複不可。`FLARELET_` と `AWS_` で始まる名前は予約済みで使えません。宣言した名前がそのまま環境変数としてアプリに渡ります。値は `flarelet secret set <name>` で設定します。
 
 ## git
 

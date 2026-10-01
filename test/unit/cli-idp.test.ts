@@ -13,17 +13,17 @@ http:
     provider: google
 secrets: [API_KEY]
 `;
-const SM = "flareon/myapp/prod/auth/";
+const SM = "flarelet/myapp/prod/auth/";
 
 let h: Harness;
 afterEach(async () => h?.cleanup());
 
 const setBoth = (stage = "prod") => {
-  h.cloud.smSecrets.set(`flareon/myapp/${stage}/auth/GOOGLE_CLIENT_ID`, {
+  h.cloud.smSecrets.set(`flarelet/myapp/${stage}/auth/GOOGLE_CLIENT_ID`, {
     value: "client-id-value",
     versionId: "vid-1",
   });
-  h.cloud.smSecrets.set(`flareon/myapp/${stage}/auth/GOOGLE_CLIENT_SECRET`, {
+  h.cloud.smSecrets.set(`flarelet/myapp/${stage}/auth/GOOGLE_CLIENT_SECRET`, {
     value: "client-secret-value",
     versionId: "vsec-2",
   });
@@ -33,8 +33,8 @@ describe("secret set/list/delete for IdP credentials", () => {
   it("stores GOOGLE_CLIENT_SECRET in Secrets Manager (not SSM) without restarting the app", async () => {
     h = await harness(YAML);
     h.cloud.addStack({
-      name: "flareon-myapp-prod-v1",
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod", "flareon:version": "v1" },
+      name: "flarelet-myapp-prod-v1",
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod", "flarelet:version": "v1" },
       outputs: { AppFunctionName: "fn" },
     });
     h.secretInput = "very-secret\n";
@@ -46,7 +46,7 @@ describe("secret set/list/delete for IdP credentials", () => {
     expect(h.cloud.calls.some((c) => c.startsWith("updateFunctionEnv"))).toBe(false);
     const all = [...h.out, ...h.err].join("\n");
     expect(all).not.toContain("very-secret");
-    expect(all).toMatch(/flareon deploy --stage prod/);
+    expect(all).toMatch(/flarelet deploy --stage prod/);
   });
 
   it("still rejects IdP names when the provider does not use them", async () => {
@@ -87,7 +87,7 @@ describe("deploy with an external IdP", () => {
     const err = h.err.join("\n");
     expect(err).toMatch(/GOOGLE_CLIENT_SECRET/);
     expect(err).not.toMatch(/GOOGLE_CLIENT_ID[^_]/);
-    expect(err).toContain("flareon secret set GOOGLE_CLIENT_SECRET --stage prod");
+    expect(err).toContain("flarelet secret set GOOGLE_CLIENT_SECRET --stage prod");
     // IdP 側に登録するリダイレクト URI（Cognito のドメインは app/stage/アカウントから決定的に決まる）
     expect(err).toMatch(
       /redirect URI.*https:\/\/myapp-prod-[0-9a-f]{6}\.auth\.[a-z0-9-]+\.amazoncognito\.com\/oauth2\/idpresponse/,
@@ -140,8 +140,8 @@ describe("destroy --stage-resources", () => {
     setBoth();
     setBoth("preview");
     h.cloud.addStack({
-      name: "flareon-myapp-prod",
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod" },
+      name: "flarelet-myapp-prod",
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod" },
     });
     expect(
       await runDestroy(
@@ -158,8 +158,8 @@ describe("destroy --stage-resources", () => {
     h.cloud.smSecrets.set(`${SM}ENTRA_CLIENT_ID`, { value: "x", versionId: "v1" });
     h.cloud.smSecrets.set(`${SM}ENTRA_CLIENT_SECRET`, { value: "y", versionId: "v2" });
     h.cloud.addStack({
-      name: "flareon-myapp-prod",
-      tags: { "flareon:app": "myapp", "flareon:stage": "prod" },
+      name: "flarelet-myapp-prod",
+      tags: { "flarelet:app": "myapp", "flarelet:stage": "prod" },
     });
     expect(
       await runDestroy(

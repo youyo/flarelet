@@ -26,14 +26,14 @@ const untilStopped = (): Promise<void> =>
     process.once("SIGTERM", done);
   });
 
-/** `flareon dev` を登録する。 */
+/** `flarelet dev` を登録する。 */
 export function registerDevCommand(program: Command, opsDeps: (a: SynthArgs) => OpsDeps): void {
   program
     .command("dev")
     .description(
       "Run the app locally with hot reload, connected to AWS dev resources (preview/local-<user>)",
     )
-    .option("-f, --file <path>", "path to the config file", "flareon.yaml")
+    .option("-f, --file <path>", "path to the config file", "flarelet.yaml")
     .option("--port <port>", `local port (default: ${DEFAULT_DEV_PORT})`, (v) => {
       const n = Number(v);
       if (!Number.isInteger(n) || n <= 0 || n > 65535) {
@@ -43,7 +43,7 @@ export function registerDevCommand(program: Command, opsDeps: (a: SynthArgs) => 
     })
     .option("--stage <stage>", "connect to an existing environment instead (with --version)")
     .option("--version <version>", "connect to an existing environment instead (with --stage)")
-    .option("--as <email>", "simulate a signed-in user (adds x-flareon-* identity headers)")
+    .option("--as <email>", "simulate a signed-in user (adds x-flarelet-* identity headers)")
     .option("--region <region>", "AWS region (default: AWS_REGION or us-east-1)")
     .action(async (o: Record<string, unknown>) => {
       const a: DevArgs = { file: resolve(String(o.file)) };

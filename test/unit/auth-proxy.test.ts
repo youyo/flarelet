@@ -6,7 +6,7 @@ import { makeDeps, makeEvent } from "./auth-fixtures.js";
 const ident = { sub: "u1", email: "a@b.c" };
 
 describe("invokeApp", () => {
-  it("x-flareon-* を除去して identity ヘッダを付与し、応答をそのまま返す", async () => {
+  it("x-flarelet-* を除去して identity ヘッダを付与し、応答をそのまま返す", async () => {
     const deps = await makeDeps();
     const res = {
       statusCode: 201,
@@ -18,7 +18,7 @@ describe("invokeApp", () => {
     deps.setInvoke(async () => ({ payload: JSON.stringify(res) }));
     const ev = makeEvent({
       rawPath: "/x",
-      headers: { host: "h", "x-flareon-user-sub": "evil", "X-Flareon-Foo": "1", "x-other": "k" },
+      headers: { host: "h", "x-flarelet-user-sub": "evil", "X-Flarelet-Foo": "1", "x-other": "k" },
     });
     const out = await invokeApp(ev, ident, "cognito", { appFunctionName: "app-fn", deps });
     expect(out).toEqual(res);
@@ -26,12 +26,12 @@ describe("invokeApp", () => {
     const inv = deps.invocations[0]!;
     expect(inv.functionName).toBe("app-fn");
     const sent = JSON.parse(inv.payload);
-    expect(sent.headers["x-flareon-user-sub"]).toBe("u1");
-    expect(sent.headers["x-flareon-user-email"]).toBe("a@b.c");
-    expect(sent.headers["x-flareon-auth-mode"]).toBe("cognito");
+    expect(sent.headers["x-flarelet-user-sub"]).toBe("u1");
+    expect(sent.headers["x-flarelet-user-email"]).toBe("a@b.c");
+    expect(sent.headers["x-flarelet-auth-mode"]).toBe("cognito");
     expect(sent.headers["x-other"]).toBe("k");
     expect(
-      Object.keys(sent.headers).filter((k: string) => k.toLowerCase() === "x-flareon-foo"),
+      Object.keys(sent.headers).filter((k: string) => k.toLowerCase() === "x-flarelet-foo"),
     ).toEqual([]);
     expect(sent.rawPath).toBe("/x");
   });
@@ -39,9 +39,9 @@ describe("invokeApp", () => {
     const deps = await makeDeps();
     await invokeApp(makeEvent(), { sub: "preview" }, "preview", { appFunctionName: "f", deps });
     const sent = JSON.parse(deps.invocations[0]!.payload);
-    expect(sent.headers["x-flareon-user-sub"]).toBe("preview");
-    expect(sent.headers["x-flareon-user-email"]).toBeUndefined();
-    expect(sent.headers["x-flareon-auth-mode"]).toBe("preview");
+    expect(sent.headers["x-flarelet-user-sub"]).toBe("preview");
+    expect(sent.headers["x-flarelet-user-email"]).toBeUndefined();
+    expect(sent.headers["x-flarelet-auth-mode"]).toBe("preview");
   });
   it("セッション Cookie は app に渡さない", async () => {
     const deps = await makeDeps();

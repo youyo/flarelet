@@ -1,6 +1,6 @@
-// flareon logs --follow（CloudWatch Logs Live Tail）の遅延計測。
-// 軽量なテスト用スタック（Lambda + ロググループ + Outputs）を CloudFormation で直接作り、flareon.yaml の
-// アプリ名に対応するスタック名（flareon-<app>-prod-v1）にして CLI から読む。
+// flarelet logs --follow（CloudWatch Logs Live Tail）の遅延計測。
+// 軽量なテスト用スタック（Lambda + ロググループ + Outputs）を CloudFormation で直接作り、flarelet.yaml の
+// アプリ名に対応するスタック名（flarelet-<app>-prod-v1）にして CLI から読む。
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,15 +101,15 @@ const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floo
 
 describe.runIf(ENABLED)("real AWS: logs --follow uses Live Tail", () => {
   const app = uniqueName("logs");
-  const stack = `flareon-${app}-prod-v1`;
+  const stack = `flarelet-${app}-prod-v1`;
   let dir: string;
   let group: string;
   let fn: string;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "flareon-logs-e2e-"));
+    dir = await mkdtemp(join(tmpdir(), "flarelet-logs-e2e-"));
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       `version: 1\nname: ${app}\nruntime: { language: python }\nhttp: true\n`,
     );
     await cfn.send(
@@ -117,7 +117,7 @@ describe.runIf(ENABLED)("real AWS: logs --follow uses Live Tail", () => {
         StackName: stack,
         TemplateBody: JSON.stringify(TEMPLATE),
         Capabilities: ["CAPABILITY_IAM"],
-        Tags: [{ Key: "flareon:e2e", Value: "logs-follow" }],
+        Tags: [{ Key: "flarelet:e2e", Value: "logs-follow" }],
       }),
     );
     await waitUntilStackCreateComplete({ client: cfn, maxWaitTime: 600 }, { StackName: stack });

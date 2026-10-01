@@ -26,7 +26,7 @@ const sm = new SecretsManagerClient({ region: REGION });
 describe.runIf(ENABLED)("real AWS: PR preview", () => {
   const app = uniqueName("pr");
   const tracked = newTracked();
-  const stack = `flareon-${app}-preview-pr-1`;
+  const stack = `flarelet-${app}-preview-pr-1`;
   let dir: string;
   let url: string;
   let cookie: string;
@@ -65,7 +65,7 @@ database: { main: {} }
       log(`deploy ${app} preview/pr-1: exit ${r.code} in ${r.ms}ms`);
       expect(r.code, r.stderr + r.stdout).toBe(0);
       expect(r.stdout).toContain(`Deploying ${app} (preview/pr-1)`);
-      expect(r.stdout).toContain("flareon env url --pr 1 --with-token");
+      expect(r.stdout).toContain("flarelet env url --pr 1 --with-token");
       expect(r.stdout).not.toContain("stage resources");
       url = urlFrom(r.stdout);
       await track(app, tracked);
@@ -80,7 +80,7 @@ database: { main: {} }
     expect(await page.text()).toContain("Preview access");
     const api = await get(`${url}/whoami`);
     expect(api.status).toBe(401);
-    const bad = await get(`${url}/__flareon/auth/preview?token=wrong`);
+    const bad = await get(`${url}/__flarelet/auth/preview?token=wrong`);
     expect(bad.status).toBe(401);
     expect(bad.headers.getSetCookie()).toEqual([]);
   });
@@ -93,7 +93,7 @@ database: { main: {} }
       const r = await cli(["env", "url", "--pr", "1", "--with-token"], dir);
       expect(r.code, r.stderr).toBe(0);
       const link = r.stdout.trim();
-      expect(link.startsWith(`${url}/__flareon/auth/preview?token=`)).toBe(true);
+      expect(link.startsWith(`${url}/__flarelet/auth/preview?token=`)).toBe(true);
 
       const res = await get(link);
       expect(res.status).toBe(302);
@@ -160,7 +160,7 @@ database: { main: {} }
 describe.runIf(ENABLED)("real AWS: PR preview of a public (auth: false) app", () => {
   const app = uniqueName("prpub");
   const tracked = newTracked();
-  const stack = `flareon-${app}-preview-pr-2`;
+  const stack = `flarelet-${app}-preview-pr-2`;
   let dir: string;
   let url: string;
 
@@ -212,8 +212,8 @@ http: { auth: false }
   it("rejects unauthenticated requests, including forged identity headers", async () => {
     expect((await get(`${url}/`)).status).toBe(401);
     const forged = await get(`${url}/whoami`, {
-      "x-flareon-user-sub": "admin",
-      "x-flareon-auth-mode": "cognito",
+      "x-flarelet-user-sub": "admin",
+      "x-flarelet-auth-mode": "cognito",
     });
     expect(forged.status).toBe(401);
   });
@@ -237,8 +237,8 @@ http: { auth: false }
 
       const who = await get(`${url}/whoami`, {
         cookie: session!.split(";")[0]!,
-        // クライアントが付けた x-flareon-* は front が剥がして付け直す
-        "x-flareon-user-sub": "admin",
+        // クライアントが付けた x-flarelet-* は front が剥がして付け直す
+        "x-flarelet-user-sub": "admin",
       });
       expect(who.status).toBe(200);
       expect(await who.json()).toMatchObject({
@@ -248,12 +248,15 @@ http: { auth: false }
         authEnabled: "true",
       });
 
-      // CI ロールが読めるのは flareon:stage=preview かつ flareon:lifecycle=ephemeral のシークレットだけ
+      // CI ロールが読めるのは flarelet:stage=preview かつ flarelet:lifecycle=ephemeral のシークレットだけ
       const arn = (await stackOutputs(stack))?.PreviewTokenSecretArn;
       expect(arn).toBeDefined();
       const d = await sm.send(new DescribeSecretCommand({ SecretId: arn }));
       const tags = Object.fromEntries((d.Tags ?? []).map((t) => [t.Key, t.Value]));
-      expect(tags).toMatchObject({ "flareon:stage": "preview", "flareon:lifecycle": "ephemeral" });
+      expect(tags).toMatchObject({
+        "flarelet:stage": "preview",
+        "flarelet:lifecycle": "ephemeral",
+      });
     },
     LONG,
   );

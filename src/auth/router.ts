@@ -7,7 +7,7 @@ import { isBrowserNavigation, json, redirect, unauthorized } from "./responses.j
 import { readSession } from "./session.js";
 import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
-const AUTH_PREFIX = "/__flareon/auth/";
+const AUTH_PREFIX = "/__flarelet/auth/";
 
 /** セッション世代のキャッシュ時間。失効（revoke-sessions）の反映はこの時間だけ遅れる。 */
 export const EPOCH_TTL_MS = 60_000;
@@ -61,12 +61,12 @@ export function createHandler(
     if (path.startsWith(AUTH_PREFIX)) {
       if (config.mode === "cognito") {
         const ctx = { config, sessionKey, deps, epoch };
-        if (path === "/__flareon/auth/login") return cognitoLogin(event, ctx);
-        if (path === "/__flareon/auth/callback") return cognitoCallback(event, ctx);
-        if (path === "/__flareon/auth/logout") return cognitoLogout(event, ctx);
+        if (path === "/__flarelet/auth/login") return cognitoLogin(event, ctx);
+        if (path === "/__flarelet/auth/callback") return cognitoCallback(event, ctx);
+        if (path === "/__flarelet/auth/logout") return cognitoLogout(event, ctx);
       } else {
         if (path === PREVIEW_PATH) return previewLogin(event, { config, sessionKey, deps, epoch });
-        if (path === "/__flareon/auth/logout") return previewLogout();
+        if (path === "/__flarelet/auth/logout") return previewLogout();
       }
       return json(404, { error: "not_found" });
     }
@@ -85,7 +85,7 @@ export function createHandler(
       }
       if (isBrowserNavigation(event)) {
         const rt = event.rawQueryString ? `${path}?${event.rawQueryString}` : path;
-        return redirect(`/__flareon/auth/login?return_to=${encodeURIComponent(rt)}`);
+        return redirect(`/__flarelet/auth/login?return_to=${encodeURIComponent(rt)}`);
       }
       return unauthorized();
     }

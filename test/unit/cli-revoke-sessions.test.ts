@@ -1,4 +1,4 @@
-// F4: flareon auth revoke-sessions / auth user remove はセッション世代を進めて既存セッションを失効させる。
+// F4: flarelet auth revoke-sessions / auth user remove はセッション世代を進めて既存セッションを失効させる。
 import { afterEach, describe, expect, it } from "vitest";
 import { runRevokeSessions, runUserRemove } from "../../src/cli/auth-user.js";
 import { harness, type Harness } from "./fake-cloud.js";
@@ -8,8 +8,8 @@ name: myapp
 runtime: { language: python }
 http: true
 `;
-const PROD_EPOCH = "/flareon/myapp/prod/auth/session-epoch";
-const PR_EPOCH = "/flareon/myapp/preview/auth/pr-3/session-epoch";
+const PROD_EPOCH = "/flarelet/myapp/prod/auth/session-epoch";
+const PR_EPOCH = "/flarelet/myapp/preview/auth/pr-3/session-epoch";
 
 let h: Harness;
 afterEach(async () => h?.cleanup());
@@ -38,7 +38,7 @@ describe("auth revoke-sessions", () => {
     h = await harness(YAML);
     expect(await runRevokeSessions({ file: h.file, stage: "prod" }, h.deps)).toBe(1);
     expect(h.cloud.params.has(PROD_EPOCH)).toBe(false);
-    expect(h.err.join("\n")).toMatch(/flareon deploy/);
+    expect(h.err.join("\n")).toMatch(/flarelet deploy/);
   });
 
   it("refuses stages without authentication", async () => {
@@ -52,7 +52,7 @@ describe("auth revoke-sessions", () => {
 describe("auth user remove revokes sessions", () => {
   it("rotates the epoch after deleting the user so their session stops working", async () => {
     h = await harness(YAML);
-    h.cloud.addStack({ name: "flareon-myapp-prod", outputs: { UserPoolId: "pool-1" } });
+    h.cloud.addStack({ name: "flarelet-myapp-prod", outputs: { UserPoolId: "pool-1" } });
     await h.cloud.createUser("pool-1", "a@example.com");
     seed(PROD_EPOCH);
     expect(
@@ -66,11 +66,11 @@ describe("auth user remove revokes sessions", () => {
 
   it("warns (but succeeds) when the stage predates session revocation", async () => {
     h = await harness(YAML);
-    h.cloud.addStack({ name: "flareon-myapp-prod", outputs: { UserPoolId: "pool-1" } });
+    h.cloud.addStack({ name: "flarelet-myapp-prod", outputs: { UserPoolId: "pool-1" } });
     await h.cloud.createUser("pool-1", "a@example.com");
     expect(
       await runUserRemove({ file: h.file, stage: "prod", email: "a@example.com" }, h.deps),
     ).toBe(0);
-    expect(h.err.join("\n")).toMatch(/Warning: .*flareon deploy/);
+    expect(h.err.join("\n")).toMatch(/Warning: .*flarelet deploy/);
   });
 });

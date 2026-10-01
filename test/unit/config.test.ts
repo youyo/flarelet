@@ -125,7 +125,7 @@ describe("parseConfig: errors carry paths", () => {
 
   it("rejects secrets that are not env-var style or use reserved prefixes", () => {
     const issues = fail(
-      "version: 1\nname: myapp\nruntime: { language: python }\nsecrets: [bad-name, FLAREON_X, AWS_Y]\n",
+      "version: 1\nname: myapp\nruntime: { language: python }\nsecrets: [bad-name, FLARELET_X, AWS_Y]\n",
     );
     expect(issues.map((i) => i.path)).toEqual(["secrets.0", "secrets.1", "secrets.2"]);
   });

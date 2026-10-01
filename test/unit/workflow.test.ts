@@ -75,10 +75,10 @@ describe("workflowTemplate branches", () => {
     expect(doc.on.push.branches).toEqual(["main", "release/*", "**", "a\\+b"]);
     expect(text(["main", "release/*"])).toContain('branches: [main, "release/*"]');
   });
-  it("starts with a comment telling to regenerate after changing flareon.yaml git settings", () => {
+  it("starts with a comment telling to regenerate after changing flarelet.yaml git settings", () => {
     const t = text(["main"]);
     expect(t.split("\n")[0]).toMatch(/^# /);
-    expect(t).toContain("flareon workflow generate --force");
+    expect(t).toContain("flarelet workflow generate --force");
     expect(t).toContain("git");
   });
 });
@@ -110,7 +110,7 @@ describe("checkWorkflowDrift", () => {
       "main",
     );
     expect(w).toContain("release/*");
-    expect(w).toContain("flareon workflow generate --force");
+    expect(w).toContain("flarelet workflow generate --force");
   });
   it("is silent when the default branch is unknown but needed, or push has no branch filter", () => {
     expect(checkWorkflowDrift(wf(["main"]), git(), undefined)).toBeNull();
@@ -121,7 +121,7 @@ describe("checkWorkflowDrift", () => {
 describe("runWorkflowGenerate", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "flareon-wf-"));
+    dir = await mkdtemp(join(tmpdir(), "flarelet-wf-"));
   });
   afterEach(async () => rm(dir, { recursive: true, force: true }));
   const io = () => {
@@ -134,13 +134,13 @@ describe("runWorkflowGenerate", () => {
     };
   };
   const yaml = (extra = "") => `version: 1\nname: demo\nruntime:\n  language: python\n${extra}`;
-  const target = () => join(dir, ".github/workflows/flareon.yml");
+  const target = () => join(dir, ".github/workflows/flarelet.yml");
   const branches = async () =>
     (parseYaml(await readFile(target(), "utf8")) as any).on.push.branches;
 
   it("creates the workflow from the git settings", async () => {
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       yaml(
         "git:\n  production:\n    branch: release/*\n    version: branch\n  preview:\n    branch: default\n",
       ),
@@ -148,7 +148,7 @@ describe("runWorkflowGenerate", () => {
     const t = io();
     expect(
       await runWorkflowGenerate(
-        { file: join(dir, "flareon.yaml"), force: false, defaultBranch: "main" },
+        { file: join(dir, "flarelet.yaml"), force: false, defaultBranch: "main" },
         t.io,
       ),
     ).toBe(0);
@@ -156,7 +156,7 @@ describe("runWorkflowGenerate", () => {
   });
 
   it("reports up to date, refuses to overwrite a different file, overwrites with force", async () => {
-    const file = join(dir, "flareon.yaml");
+    const file = join(dir, "flarelet.yaml");
     await writeFile(file, yaml());
     const a = { file, force: false, defaultBranch: "main" };
     expect(await runWorkflowGenerate(a, io().io)).toBe(0);
@@ -175,11 +175,11 @@ describe("runWorkflowGenerate", () => {
     expect(await branches()).toEqual(["main", "dev/*"]);
   });
 
-  it("fails on missing or invalid flareon.yaml", async () => {
+  it("fails on missing or invalid flarelet.yaml", async () => {
     const t = io();
-    expect(await runWorkflowGenerate({ file: join(dir, "flareon.yaml"), force: false }, t.io)).toBe(
-      1,
-    );
+    expect(
+      await runWorkflowGenerate({ file: join(dir, "flarelet.yaml"), force: false }, t.io),
+    ).toBe(1);
     await mkdir(dir, { recursive: true });
   });
 });

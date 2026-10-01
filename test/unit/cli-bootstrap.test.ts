@@ -3,7 +3,7 @@ import { PROVIDER_STACK, providerArn, synthGithubBootstrap } from "../../src/boo
 import { runBootstrapGithub, type BootstrapDeps } from "../../src/cli/bootstrap.js";
 import { harness, type Harness } from "./fake-cloud.js";
 
-const ROLE_STACK = "flareon-bootstrap-github-youyo-myapp";
+const ROLE_STACK = "flarelet-bootstrap-github-youyo-myapp";
 const PROVIDER = providerArn("123456789012");
 
 let h: Harness;
@@ -28,12 +28,12 @@ async function setup(env: Record<string, string> = { AWS_REGION: "ap-northeast-1
   h.deployer.result = [
     {
       name: ROLE_STACK,
-      outputs: { RoleArn: "arn:aws:iam::123456789012:role/flareon-github-youyo-myapp" },
+      outputs: { RoleArn: "arn:aws:iam::123456789012:role/flarelet-github-youyo-myapp" },
     },
   ];
 }
 
-describe("flareon bootstrap github", () => {
+describe("flarelet bootstrap github", () => {
   it("reuses an existing OIDC provider and prints the role ARN and gh commands", async () => {
     await setup();
     h.cloud.oidcProvider = PROVIDER;
@@ -48,12 +48,12 @@ describe("flareon bootstrap github", () => {
     expect(h.deployer.outdirs).toHaveLength(1);
     const out = h.out.join("\n");
     expect(out).toContain("reusing");
-    expect(out).toContain("arn:aws:iam::123456789012:role/flareon-github-youyo-myapp");
+    expect(out).toContain("arn:aws:iam::123456789012:role/flarelet-github-youyo-myapp");
     expect(out).toContain(
-      "gh variable set FLAREON_AWS_ROLE_ARN --repo youyo/myapp --body arn:aws:iam::123456789012:role/flareon-github-youyo-myapp",
+      "gh variable set FLARELET_AWS_ROLE_ARN --repo youyo/myapp --body arn:aws:iam::123456789012:role/flarelet-github-youyo-myapp",
     );
     expect(out).toContain(
-      "gh variable set FLAREON_AWS_REGION --repo youyo/myapp --body ap-northeast-1",
+      "gh variable set FLARELET_AWS_REGION --repo youyo/myapp --body ap-northeast-1",
     );
   });
 
@@ -64,12 +64,12 @@ describe("flareon bootstrap github", () => {
     expect(h.out.join("\n")).toContain("creating");
   });
 
-  it("keeps managing the provider stack Flareon created earlier", async () => {
+  it("keeps managing the provider stack Flarelet created earlier", async () => {
     await setup();
     h.cloud.oidcProvider = PROVIDER;
     h.cloud.addStack({
       name: PROVIDER_STACK,
-      tags: { "flareon:bootstrap": "github-oidc-provider" },
+      tags: { "flarelet:bootstrap": "github-oidc-provider" },
     });
     await runBootstrapGithub({ repo: "youyo/myapp" }, deps);
     expect(synthed[0]!.createProvider).toBe(false);
@@ -79,7 +79,7 @@ describe("flareon bootstrap github", () => {
     await setup();
     h.cloud.addStack({
       name: PROVIDER_STACK,
-      tags: { "flareon:bootstrap": "github-oidc-provider" },
+      tags: { "flarelet:bootstrap": "github-oidc-provider" },
     });
     expect(await runBootstrapGithub({ repo: "youyo/myapp" }, deps)).toBe(1);
     expect(h.err.join("\n")).toContain(PROVIDER_STACK);
@@ -98,7 +98,7 @@ describe("flareon bootstrap github", () => {
     h.cloud.oidcProvider = PROVIDER;
     h.cloud.addStack({
       name: ROLE_STACK,
-      tags: { "flareon:bootstrap": "github-role", "flareon:repo": "youyo-x/myapp" },
+      tags: { "flarelet:bootstrap": "github-role", "flarelet:repo": "youyo-x/myapp" },
     });
     expect(await runBootstrapGithub({ repo: "youyo/myapp" }, deps)).toBe(1);
     expect(h.err.join("\n")).toContain("youyo-x/myapp");
@@ -114,9 +114,9 @@ describe("flareon bootstrap github", () => {
   });
 });
 
-describe("flareon bootstrap github --destroy", () => {
-  const roleTags = { "flareon:bootstrap": "github-role", "flareon:repo": "youyo/myapp" };
-  const providerTags = { "flareon:bootstrap": "github-oidc-provider" };
+describe("flarelet bootstrap github --destroy", () => {
+  const roleTags = { "flarelet:bootstrap": "github-role", "flarelet:repo": "youyo/myapp" };
+  const providerTags = { "flarelet:bootstrap": "github-oidc-provider" };
 
   it("deletes only the role stack and leaves an unmanaged OIDC provider alone", async () => {
     await setup();
@@ -128,7 +128,7 @@ describe("flareon bootstrap github --destroy", () => {
     ]);
   });
 
-  it("also deletes the provider stack Flareon created when nothing else trusts it", async () => {
+  it("also deletes the provider stack Flarelet created when nothing else trusts it", async () => {
     await setup();
     h.cloud.oidcProvider = PROVIDER;
     h.cloud.addStack({ name: ROLE_STACK, tags: roleTags });
@@ -161,7 +161,7 @@ describe("flareon bootstrap github --destroy", () => {
     await setup();
     h.cloud.addStack({
       name: ROLE_STACK,
-      tags: { "flareon:bootstrap": "github-role", "flareon:repo": "youyo-x/myapp" },
+      tags: { "flarelet:bootstrap": "github-role", "flarelet:repo": "youyo-x/myapp" },
     });
     expect(await runBootstrapGithub({ repo: "youyo/myapp", destroy: true }, deps)).toBe(1);
     expect(h.cloud.calls.filter((c) => c.startsWith("deleteStack"))).toEqual([]);

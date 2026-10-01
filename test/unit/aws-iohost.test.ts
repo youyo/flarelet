@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FlareonIoHost, type ProgressEvent } from "../../src/aws/iohost.js";
+import { FlareletIoHost, type ProgressEvent } from "../../src/aws/iohost.js";
 
 const msg = (code: string, data: unknown, level = "info", message = "") => ({
   time: new Date(),
@@ -12,19 +12,19 @@ const msg = (code: string, data: unknown, level = "info", message = "") => ({
 
 function host() {
   const events: ProgressEvent[] = [];
-  return { events, h: new FlareonIoHost((e) => events.push(e)) };
+  return { events, h: new FlareletIoHost((e) => events.push(e)) };
 }
 
-describe("FlareonIoHost", () => {
-  it("translates stack monitoring into Flareon progress events", async () => {
+describe("FlareletIoHost", () => {
+  it("translates stack monitoring into Flarelet progress events", async () => {
     const { events, h } = host();
-    await h.notify(msg("CDK_TOOLKIT_I5501", { stackName: "flareon-a-prod" }) as never);
+    await h.notify(msg("CDK_TOOLKIT_I5501", { stackName: "flarelet-a-prod" }) as never);
     await h.notify(
       msg("CDK_TOOLKIT_I5502", {
         event: {
           LogicalResourceId: "DataDatabasemain1",
           ResourceStatus: "CREATE_IN_PROGRESS",
-          StackName: "flareon-a-prod",
+          StackName: "flarelet-a-prod",
           ResourceType: "AWS::DynamoDB::Table",
         },
         metadata: { constructPath: "Data/Database-main" },
@@ -36,28 +36,28 @@ describe("FlareonIoHost", () => {
           LogicalResourceId: "UserPool",
           ResourceStatus: "CREATE_FAILED",
           ResourceStatusReason: "Domain already exists",
-          StackName: "flareon-a-prod",
+          StackName: "flarelet-a-prod",
         },
-        metadata: { constructPath: "/flareon-a-prod/UserPool/Resource" },
+        metadata: { constructPath: "/flarelet-a-prod/UserPool/Resource" },
       }) as never,
     );
-    await h.notify(msg("CDK_TOOLKIT_I5503", { stackName: "flareon-a-prod" }) as never);
+    await h.notify(msg("CDK_TOOLKIT_I5503", { stackName: "flarelet-a-prod" }) as never);
     expect(events).toEqual([
-      { type: "stack-start", stack: "flareon-a-prod" },
+      { type: "stack-start", stack: "flarelet-a-prod" },
       {
         type: "resource",
-        stack: "flareon-a-prod",
+        stack: "flarelet-a-prod",
         concept: "database.main",
         status: "CREATE_IN_PROGRESS",
       },
       {
         type: "resource",
-        stack: "flareon-a-prod",
+        stack: "flarelet-a-prod",
         concept: "authentication",
         status: "CREATE_FAILED",
         reason: "Domain already exists",
       },
-      { type: "stack-end", stack: "flareon-a-prod" },
+      { type: "stack-end", stack: "flarelet-a-prod" },
     ]);
   });
 

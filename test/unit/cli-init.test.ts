@@ -10,7 +10,7 @@ import { appNameFromDir, runInit } from "../../src/cli/init.js";
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-init-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-init-"));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -40,7 +40,7 @@ describe("runInit", () => {
     const t = io();
     const code = await runInit({ dir, runtime: "python" }, t.io);
     expect(code).toBe(0);
-    const yaml = await readFile(join(dir, "flareon.yaml"), "utf8");
+    const yaml = await readFile(join(dir, "flarelet.yaml"), "utf8");
     const parsed = parseConfig(yaml);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.config.runtime.language).toBe("python");
@@ -48,19 +48,19 @@ describe("runInit", () => {
     const req = await readFile(join(dir, "app/requirements.txt"), "utf8");
     expect(req).toContain("fastapi");
     expect(req).toContain("uvicorn");
-    expect(await readFile(join(dir, ".gitignore"), "utf8")).toContain(".flareon/");
+    expect(await readFile(join(dir, ".gitignore"), "utf8")).toContain(".flarelet/");
   });
 
   it("tells how to install the AI agent skill", async () => {
     const t = io();
     await runInit({ dir, runtime: "python" }, t.io);
-    expect(t.out.join("\n")).toContain("flareon skill install");
+    expect(t.out.join("\n")).toContain("flarelet skill install");
   });
 
   it("scaffolds a typescript project (Hono)", async () => {
     const code = await runInit({ dir, runtime: "typescript" }, io().io);
     expect(code).toBe(0);
-    const parsed = parseConfig(await readFile(join(dir, "flareon.yaml"), "utf8"));
+    const parsed = parseConfig(await readFile(join(dir, "flarelet.yaml"), "utf8"));
     expect(parsed.ok && parsed.config.runtime.language).toBe("typescript");
     const src = await readFile(join(dir, "app/index.ts"), "utf8");
     expect(src).toContain("Hono");
@@ -73,7 +73,7 @@ describe("runInit", () => {
   it("defaults to python, creates the target dir and names the app after it", async () => {
     const target = join(dir, "sub", "Hello App");
     expect(await runInit({ dir: target }, io().io)).toBe(0);
-    const yaml = await readFile(join(target, "flareon.yaml"), "utf8");
+    const yaml = await readFile(join(target, "flarelet.yaml"), "utf8");
     expect(yaml).toContain("name: hello-app");
     expect(yaml).toContain("language: python");
   });
@@ -82,19 +82,21 @@ describe("runInit", () => {
     await writeFile(join(dir, ".gitignore"), "node_modules\n");
     await runInit({ dir, runtime: "python" }, io().io);
     const g = await readFile(join(dir, ".gitignore"), "utf8");
-    expect(g).toBe("node_modules\n.flareon/\n");
-    await rm(join(dir, "flareon.yaml"));
+    expect(g).toBe("node_modules\n.flarelet/\n");
+    await rm(join(dir, "flarelet.yaml"));
     await runInit({ dir, runtime: "python" }, io().io);
-    expect((await readFile(join(dir, ".gitignore"), "utf8")).match(/\.flareon\//g)).toHaveLength(1);
+    expect((await readFile(join(dir, ".gitignore"), "utf8")).match(/\.flarelet\//g)).toHaveLength(
+      1,
+    );
   });
 
-  it("refuses to overwrite an existing flareon.yaml", async () => {
+  it("refuses to overwrite an existing flarelet.yaml", async () => {
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "flareon.yaml"), "keep");
+    await writeFile(join(dir, "flarelet.yaml"), "keep");
     const t = io();
     expect(await runInit({ dir, runtime: "python" }, t.io)).toBe(1);
     expect(t.err.join("\n")).toContain("already exists");
-    expect(await readFile(join(dir, "flareon.yaml"), "utf8")).toBe("keep");
+    expect(await readFile(join(dir, "flarelet.yaml"), "utf8")).toBe("keep");
     expect(existsSync(join(dir, "app"))).toBe(false);
   });
 
@@ -110,7 +112,7 @@ describe("runInit GitHub workflow", () => {
     const t = io();
     expect(await runInit(opts, t.io)).toBe(0);
     return {
-      text: await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8"),
+      text: await readFile(join(dir, ".github/workflows/flarelet.yml"), "utf8"),
       out: t.out,
     };
   };
@@ -137,14 +139,14 @@ describe("runInit GitHub workflow", () => {
       const aws = job.steps.find((s: any) =>
         String(s.uses).startsWith("aws-actions/configure-aws-credentials@"),
       );
-      expect(aws.with["role-to-assume"]).toBe("${{ vars.FLAREON_AWS_ROLE_ARN }}");
-      expect(aws.with["aws-region"]).toBe("${{ vars.FLAREON_AWS_REGION }}");
+      expect(aws.with["role-to-assume"]).toBe("${{ vars.FLARELET_AWS_ROLE_ARN }}");
+      expect(aws.with["aws-region"]).toBe("${{ vars.FLARELET_AWS_REGION }}");
     }
     expect(text).toContain("deploy --ci");
     expect(text).toContain("destroy --ci");
     expect(text).toContain("github comment --state ${{ steps.deploy.outcome == 'success'");
     expect(text).toContain("github comment --state inactive");
-    expect(text).toContain("FLAREON_PACKAGE");
+    expect(text).toContain("FLARELET_PACKAGE");
     expect(text).not.toMatch(/AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID/);
   });
 
@@ -152,11 +154,11 @@ describe("runInit GitHub workflow", () => {
     const ts = await wf({ dir, runtime: "typescript" });
     expect(ts.text).toContain("npm install");
     expect(ts.text).toContain("branches: [main]");
-    const dir2 = await mkdtemp(join(tmpdir(), "flareon-init2-"));
+    const dir2 = await mkdtemp(join(tmpdir(), "flarelet-init2-"));
     try {
       const t = io();
       await runInit({ dir: dir2, runtime: "python" }, t.io);
-      expect(await readFile(join(dir2, ".github/workflows/flareon.yml"), "utf8")).not.toContain(
+      expect(await readFile(join(dir2, ".github/workflows/flarelet.yml"), "utf8")).not.toContain(
         "npm install",
       );
     } finally {
@@ -166,17 +168,19 @@ describe("runInit GitHub workflow", () => {
 
   it("never overwrites an existing workflow", async () => {
     await mkdir(join(dir, ".github/workflows"), { recursive: true });
-    await writeFile(join(dir, ".github/workflows/flareon.yml"), "mine: true\n");
+    await writeFile(join(dir, ".github/workflows/flarelet.yml"), "mine: true\n");
     const t = io();
     expect(await runInit({ dir, runtime: "python" }, t.io)).toBe(0);
-    expect(await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8")).toBe("mine: true\n");
+    expect(await readFile(join(dir, ".github/workflows/flarelet.yml"), "utf8")).toBe(
+      "mine: true\n",
+    );
     expect(t.out.join("\n")).toMatch(/already exists/);
   });
 
   it("points to bootstrap and gh variable set in the next steps", async () => {
     const { out } = await wf({ dir, runtime: "python" });
-    expect(out.join("\n")).toContain("flareon bootstrap github --repo");
-    expect(out.join("\n")).toContain("FLAREON_AWS_ROLE_ARN");
+    expect(out.join("\n")).toContain("flarelet bootstrap github --repo");
+    expect(out.join("\n")).toContain("FLARELET_AWS_ROLE_ARN");
   });
 });
 
@@ -184,7 +188,7 @@ describe("runInit workflow header", () => {
   it("mentions regeneration after changing git settings", async () => {
     const t = io();
     await runInit({ dir, runtime: "python" }, t.io);
-    const text = await readFile(join(dir, ".github/workflows/flareon.yml"), "utf8");
-    expect(text).toContain("flareon workflow generate --force");
+    const text = await readFile(join(dir, ".github/workflows/flarelet.yml"), "utf8");
+    expect(text).toContain("flarelet workflow generate --force");
   });
 });

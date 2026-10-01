@@ -14,11 +14,11 @@ import {
 } from "./session.js";
 import type { ApiEvent, ApiResult, AuthDeps } from "./types.js";
 
-/** Path を /__flareon/auth に絞るため `__Host-` は使えない。`__Secure-` で Secure を強制する。 */
-export const FLOW_COOKIE = "__Secure-flareon_flow";
+/** Path を /__flarelet/auth に絞るため `__Host-` は使えない。`__Secure-` で Secure を強制する。 */
+export const FLOW_COOKIE = "__Secure-flarelet_flow";
 const FLOW_TTL_SECONDS = 10 * 60;
-const FLOW_COOKIE_PATH = "/__flareon/auth";
-export const CALLBACK_PATH = "/__flareon/auth/callback";
+const FLOW_COOKIE_PATH = "/__flarelet/auth";
+export const CALLBACK_PATH = "/__flarelet/auth/callback";
 
 export interface CognitoContext {
   config: CognitoConfig;
@@ -225,7 +225,7 @@ function accessDenied(who: string | undefined): ApiResult {
 </head><body>
 <h1>Access denied</h1>
 <p>You signed in as ${account}, but this app only allows specific accounts or organizations.</p>
-<p>Ask the app owner for access, or <a href="/__flareon/auth/logout">sign out</a> and sign in with a different account.</p>
+<p>Ask the app owner for access, or <a href="/__flarelet/auth/logout">sign out</a> and sign in with a different account.</p>
 </body></html>
 `,
     [clearFlowCookie()],

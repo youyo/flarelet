@@ -1,5 +1,5 @@
-// `flareon dev` をビルド済み CLI で実際に起動し、起動画面・ローカルアプリの応答・ホットリロード・停止を検証する。
-// FLAREON_OFFLINE=1 なので AWS には接続しない（バインディングは offline 表示）。
+// `flarelet dev` をビルド済み CLI で実際に起動し、起動画面・ローカルアプリの応答・ホットリロード・停止を検証する。
+// FLARELET_OFFLINE=1 なので AWS には接続しない（バインディングは offline 表示）。
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request } from "node:http";
@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 const ENV = {
   ...process.env,
-  FLAREON_OFFLINE: "1",
+  FLARELET_OFFLINE: "1",
   AWS_REGION: "ap-northeast-1",
   AWS_ACCESS_KEY_ID: "AKIAEXAMPLE",
   AWS_SECRET_ACCESS_KEY: "invalid",
@@ -29,14 +29,14 @@ createServer((req, res) => {
   res.end(JSON.stringify({
     marker,
     path: req.url,
-    version: process.env.FLAREON_VERSION ?? null,
-    stage: process.env.FLAREON_STAGE ?? null,
-    dev: process.env.FLAREON_DEV ?? null,
-    email: req.headers["x-flareon-user-email"] ?? null,
-    mode: req.headers["x-flareon-auth-mode"] ?? null,
+    version: process.env.FLARELET_VERSION ?? null,
+    stage: process.env.FLARELET_STAGE ?? null,
+    dev: process.env.FLARELET_DEV ?? null,
+    email: req.headers["x-flarelet-user-email"] ?? null,
+    mode: req.headers["x-flarelet-auth-mode"] ?? null,
     host: process.env.HOST ?? null,
-    secret: process.env.FLAREON_DEV_SECRET ?? null,
-    secretHeader: req.headers["x-flareon-dev-secret"] ?? null,
+    secret: process.env.FLARELET_DEV_SECRET ?? null,
+    secretHeader: req.headers["x-flarelet-dev-secret"] ?? null,
   }));
 }).listen(Number(process.env.PORT), process.env.HOST);
 `;
@@ -58,7 +58,7 @@ interface Running {
 }
 
 /** fastapi / uvicorn 入りのテスト用 venv（mise run test:e2e:python-env が作る）。 */
-const PY_VENV_BIN = resolve(import.meta.dirname, "../../.flareon/e2e-python/bin");
+const PY_VENV_BIN = resolve(import.meta.dirname, "../../.flarelet/e2e-python/bin");
 
 function startDev(args: string[], cwd: string, env: NodeJS.ProcessEnv = ENV): Running {
   const child = spawn(process.execPath, [CLI, "dev", ...args], { cwd, env });
@@ -102,9 +102,9 @@ const getJson = async (url: string, headers: Record<string, string> = {}) =>
 let dir: string;
 let running: Running | undefined;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-dev-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-dev-"));
   await writeFile(
-    join(dir, "flareon.yaml"),
+    join(dir, "flarelet.yaml"),
     `version: 1
 name: devapp
 runtime: { language: typescript }
@@ -125,7 +125,7 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("flareon dev (offline)", () => {
+describe("flarelet dev (offline)", () => {
   it("shows the startup screen, serves the app, reloads on change and stops cleanly", async () => {
     const port = await freePort();
     running = startDev(["--port", String(port)], dir);
@@ -133,7 +133,7 @@ describe("flareon dev (offline)", () => {
     await until(() => (r.out().includes("Watching...") ? true : undefined));
 
     const screen = r.out();
-    expect(screen).toContain("Flareon dev");
+    expect(screen).toContain("Flarelet dev");
     expect(screen).toMatch(/App\s+devapp/);
     expect(screen).toMatch(/Stage\s+preview/);
     expect(screen).toMatch(/Version\s+local-[a-z0-9-]+/);
@@ -154,7 +154,7 @@ describe("flareon dev (offline)", () => {
     });
 
     // 本番の front と同様、クライアント由来の identity ヘッダは届かない
-    const spoofed = await getJson(url, { "x-flareon-user-email": "evil@example.com" });
+    const spoofed = await getJson(url, { "x-flarelet-user-email": "evil@example.com" });
     expect(spoofed.email).toBeNull();
 
     await writeFile(join(dir, "app", "index.ts"), appSource("v2"));
@@ -189,7 +189,7 @@ describe("flareon dev (offline)", () => {
     const j = await until(() => getJson(`http://localhost:${port}/`));
     // TypeScript アプリには HOST=127.0.0.1 を渡す（全インターフェースで listen させない）
     expect(j.host).toBe("127.0.0.1");
-    // プロキシ経由のリクエストにだけ、アプリの FLAREON_DEV_SECRET と同じ秘密ヘッダが付く
+    // プロキシ経由のリクエストにだけ、アプリの FLARELET_DEV_SECRET と同じ秘密ヘッダが付く
     expect(j.secret).toMatch(/^[A-Za-z0-9_-]{32,}$/);
     expect(j.secretHeader).toBe(j.secret);
     expect(r.out()).not.toContain(j.secret!);
@@ -274,20 +274,20 @@ def handle(path: str, request: Request):
     return {
         "marker": MARKER,
         "path": "/" + path,
-        "stage": os.environ.get("FLAREON_STAGE"),
-        "dev": os.environ.get("FLAREON_DEV"),
-        "email": request.headers.get("x-flareon-user-email"),
+        "stage": os.environ.get("FLARELET_STAGE"),
+        "dev": os.environ.get("FLARELET_DEV"),
+        "email": request.headers.get("x-flarelet-user-email"),
     }
 `;
 
-describe("flareon dev (offline, python)", () => {
+describe("flarelet dev (offline, python)", () => {
   it("runs a FastAPI app with uvicorn and restarts it when a file changes", async () => {
     expect(
       existsSync(join(PY_VENV_BIN, "python")),
       "python venv missing; run `mise run test:e2e:python-env`",
     ).toBe(true);
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       "version: 1\nname: devpy\nruntime: { language: python }\nhttp: true\n",
     );
     await rm(join(dir, "app"), { recursive: true, force: true });

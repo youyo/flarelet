@@ -20,13 +20,13 @@ description = "Unit テスト"
 run = "vitest run test/unit"
 
 [tasks."test:e2e:python-env"]
-description = "flareon dev（python）の E2E 用 venv を .flareon/e2e-python に用意（初回のみ pip でネットワークを使う）"
+description = "flarelet dev（python）の E2E 用 venv を .flarelet/e2e-python に用意（初回のみ pip でネットワークを使う）"
 sources = ["test/e2e/python/requirements.txt"]
-outputs = [".flareon/e2e-python/.installed"]
+outputs = [".flarelet/e2e-python/.installed"]
 run = [
-  "python -m venv .flareon/e2e-python",
-  ".flareon/e2e-python/bin/python -m pip install --quiet --disable-pip-version-check -r test/e2e/python/requirements.txt",
-  "touch .flareon/e2e-python/.installed",
+  "python -m venv .flarelet/e2e-python",
+  ".flarelet/e2e-python/bin/python -m pip install --quiet --disable-pip-version-check -r test/e2e/python/requirements.txt",
+  "touch .flarelet/e2e-python/.installed",
 ]
 
 [tasks."test:e2e"]
@@ -40,7 +40,7 @@ depends = ["build", "test:e2e:python-env"]
 run = "vitest run"
 
 [tasks."test:e2e:aws"]
-description = "実 AWS E2E（FLAREON_E2E_AWS=1 のときだけ実行。deploy → 検証 → destroy）"
+description = "実 AWS E2E（FLARELET_E2E_AWS=1 のときだけ実行。deploy → 検証 → destroy）"
 depends = ["build", "playwright:install"]
 run = "vitest run test/e2e/aws"
 

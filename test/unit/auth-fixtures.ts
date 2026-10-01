@@ -9,24 +9,24 @@ export const CLIENT_ID = "client123";
 export const COGNITO_DOMAIN = "https://myapp-prod-abc.auth.ap-northeast-1.amazoncognito.com";
 export const ISSUER = `https://cognito-idp.ap-northeast-1.amazonaws.com/${POOL_ID}`;
 
-export const EPOCH_PARAM = "/flareon/myapp/prod/auth/session-epoch";
+export const EPOCH_PARAM = "/flarelet/myapp/prod/auth/session-epoch";
 
 export const COGNITO_ENV = {
-  FLAREON_AUTH_MODE: "cognito",
-  FLAREON_APP_FUNCTION_NAME: "app-fn",
-  FLAREON_SESSION_SECRET_ARN: "arn:session",
-  FLAREON_SESSION_EPOCH_PARAM: EPOCH_PARAM,
-  FLAREON_COGNITO_DOMAIN: COGNITO_DOMAIN,
-  FLAREON_COGNITO_CLIENT_ID: CLIENT_ID,
-  FLAREON_COGNITO_USER_POOL_ID: POOL_ID,
+  FLARELET_AUTH_MODE: "cognito",
+  FLARELET_APP_FUNCTION_NAME: "app-fn",
+  FLARELET_SESSION_SECRET_ARN: "arn:session",
+  FLARELET_SESSION_EPOCH_PARAM: EPOCH_PARAM,
+  FLARELET_COGNITO_DOMAIN: COGNITO_DOMAIN,
+  FLARELET_COGNITO_CLIENT_ID: CLIENT_ID,
+  FLARELET_COGNITO_USER_POOL_ID: POOL_ID,
 };
 
 export const PREVIEW_ENV = {
-  FLAREON_AUTH_MODE: "preview",
-  FLAREON_APP_FUNCTION_NAME: "app-fn",
-  FLAREON_SESSION_SECRET_ARN: "arn:session",
-  FLAREON_SESSION_EPOCH_PARAM: EPOCH_PARAM,
-  FLAREON_PREVIEW_TOKEN_SECRET_ARN: "arn:preview",
+  FLARELET_AUTH_MODE: "preview",
+  FLARELET_APP_FUNCTION_NAME: "app-fn",
+  FLARELET_SESSION_SECRET_ARN: "arn:session",
+  FLARELET_SESSION_EPOCH_PARAM: EPOCH_PARAM,
+  FLARELET_PREVIEW_TOKEN_SECRET_ARN: "arn:preview",
 };
 
 export function makeEvent(over: Partial<ApiEvent> & { method?: string } = {}): ApiEvent {

@@ -2,7 +2,7 @@ export {
   configSchema,
   AUTH_PROVIDERS,
   SUPPORTED_AUTH_PROVIDERS,
-  type FlareonConfig,
+  type FlareletConfig,
 } from "./schema.js";
 export {
   parseConfig,

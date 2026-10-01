@@ -1,8 +1,8 @@
-# Flareon v0 Design Bundle
+# Flarelet v0 Design Bundle
 
-This bundle contains the current Flareon v0 architecture and product design agreed during brainstorming.
+This bundle contains the current Flarelet v0 architecture and product design agreed during brainstorming.
 
-- `FLAREON_V0_DESIGN.md` — canonical design specification
+- `FLARELET_V0_DESIGN.md` — canonical design specification
 
 Core direction:
 

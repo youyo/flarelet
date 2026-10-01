@@ -1,6 +1,6 @@
 import { App, CfnOutput, Stack } from "aws-cdk-lib";
 import { rmSync } from "node:fs";
-import type { FlareonIR } from "../ir/index.js";
+import type { FlareletIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 import { Data } from "./data.js";
@@ -8,12 +8,12 @@ import type { SynthResult } from "./index.js";
 import { stackNames } from "./names.js";
 
 /**
- * `flareon dev` 用の環境（既定 `preview/local-<user>`）。DB / Storage だけを 1 スタックに作り、
- * スタック削除で消えるようにする（`flareon destroy --stage preview --version local-<user>`）。
+ * `flarelet dev` 用の環境（既定 `preview/local-<user>`）。DB / Storage だけを 1 スタックに作り、
+ * スタック削除で消えるようにする（`flarelet destroy --stage preview --version local-<user>`）。
  * バインディングの値は JSON の出力 `Bindings`（環境変数名 → 値）で返す。
  */
 export interface DevBuildOptions {
-  ir: FlareonIR;
+  ir: FlareletIR;
   deployment: Deployment;
   region: string;
   account?: string;
@@ -30,12 +30,12 @@ export function buildDevApp(o: DevBuildOptions): { app: App; stack: Stack } {
   const stack = new Stack(app, name, {
     stackName: name,
     env: { region: o.region, ...(o.account ? { account: o.account } : {}) },
-    description: `Flareon dev resources for ${o.ir.name} (${o.deployment.stage}/${o.deployment.version})`,
+    description: `Flarelet dev resources for ${o.ir.name} (${o.deployment.stage}/${o.deployment.version})`,
     tags: {
-      "flareon:app": o.ir.name,
-      "flareon:stage": o.deployment.stage,
-      "flareon:version": o.deployment.version,
-      "flareon:lifecycle": "dev",
+      "flarelet:app": o.ir.name,
+      "flarelet:stage": o.deployment.stage,
+      "flarelet:version": o.deployment.version,
+      "flarelet:lifecycle": "dev",
     },
   });
   const data = new Data(stack, "Data", { ir: o.ir, lifetime: "destroy" });

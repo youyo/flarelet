@@ -35,13 +35,13 @@ app = FastAPI()
 
 @app.get("/")
 def index(request: Request):
-    # Flareon が付与する認証済みユーザー情報（x-flareon-* ヘッダ）と、バインディングの環境変数
+    # Flarelet が付与する認証済みユーザー情報（x-flarelet-* ヘッダ）と、バインディングの環境変数
     return {
-        "message": "Hello from Flareon",
-        "user": request.headers.get("x-flareon-user-email"),
-        "table": os.environ.get("FLAREON_DATABASE_MAIN_TABLE"),
-        "bucket": os.environ.get("FLAREON_STORAGE_FILES_BUCKET"),
-        "model": os.environ.get("FLAREON_AI_SONNET_MODEL_ID"),
+        "message": "Hello from Flarelet",
+        "user": request.headers.get("x-flarelet-user-email"),
+        "table": os.environ.get("FLARELET_DATABASE_MAIN_TABLE"),
+        "bucket": os.environ.get("FLARELET_STORAGE_FILES_BUCKET"),
+        "model": os.environ.get("FLARELET_AI_SONNET_MODEL_ID"),
     }
 `;
 
@@ -52,16 +52,16 @@ const app = new Hono();
 
 app.get("/", (c) =>
   c.json({
-    message: "Hello from Flareon",
-    // Flareon が付与する認証済みユーザー情報（x-flareon-* ヘッダ）と、バインディングの環境変数
-    user: c.req.header("x-flareon-user-email") ?? null,
-    table: process.env.FLAREON_DATABASE_MAIN_TABLE ?? null,
-    bucket: process.env.FLAREON_STORAGE_FILES_BUCKET ?? null,
-    model: process.env.FLAREON_AI_SONNET_MODEL_ID ?? null,
+    message: "Hello from Flarelet",
+    // Flarelet が付与する認証済みユーザー情報（x-flarelet-* ヘッダ）と、バインディングの環境変数
+    user: c.req.header("x-flarelet-user-email") ?? null,
+    table: process.env.FLARELET_DATABASE_MAIN_TABLE ?? null,
+    bucket: process.env.FLARELET_STORAGE_FILES_BUCKET ?? null,
+    model: process.env.FLARELET_AI_SONNET_MODEL_ID ?? null,
   }),
 );
 
-// Lambda では Lambda Web Adapter が 127.0.0.1 にアクセスし、flareon dev は HOST=127.0.0.1 を渡す。
+// Lambda では Lambda Web Adapter が 127.0.0.1 にアクセスし、flarelet dev は HOST=127.0.0.1 を渡す。
 // 全インターフェースで listen すると、同じネットワークから identity ヘッダを偽装して直接アクセスできてしまう
 serve({
   fetch: app.fetch,
@@ -79,13 +79,13 @@ const TS_PACKAGE = {
 export function scaffold(name: string, language: RuntimeLanguage): ScaffoldFile[] {
   if (language === "python") {
     return [
-      { path: "flareon.yaml", content: common(name, '  language: python\n  version: "3.13"') },
+      { path: "flarelet.yaml", content: common(name, '  language: python\n  version: "3.13"') },
       { path: "app/main.py", content: PYTHON_MAIN },
       { path: "app/requirements.txt", content: "fastapi>=0.115\nuvicorn>=0.30\n" },
     ];
   }
   return [
-    { path: "flareon.yaml", content: common(name, "  language: typescript") },
+    { path: "flarelet.yaml", content: common(name, "  language: typescript") },
     { path: "app/index.ts", content: TS_INDEX },
     { path: "app/package.json", content: JSON.stringify(TS_PACKAGE, null, 2) + "\n" },
   ];

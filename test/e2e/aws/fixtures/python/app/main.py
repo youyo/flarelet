@@ -1,4 +1,4 @@
-"""実 AWS E2E 用のアプリ。Flareon のバインディング（DB / Storage / AI / secrets）と認証 identity を確認する。"""
+"""実 AWS E2E 用のアプリ。Flarelet のバインディング（DB / Storage / AI / secrets）と認証 identity を確認する。"""
 
 import hashlib
 import json
@@ -12,31 +12,31 @@ app = FastAPI()
 
 
 def _table():
-    return boto3.resource("dynamodb").Table(os.environ["FLAREON_DATABASE_MAIN_TABLE"])
+    return boto3.resource("dynamodb").Table(os.environ["FLARELET_DATABASE_MAIN_TABLE"])
 
 
 def _bucket():
-    return os.environ["FLAREON_STORAGE_FILES_BUCKET"]
+    return os.environ["FLARELET_STORAGE_FILES_BUCKET"]
 
 
 @app.get("/")
 def index(request: Request):
     return {
         "app": "python",
-        "version": os.environ.get("FLAREON_VERSION"),
-        "user": request.headers.get("x-flareon-user-email"),
+        "version": os.environ.get("FLARELET_VERSION"),
+        "user": request.headers.get("x-flarelet-user-email"),
     }
 
 
 @app.get("/whoami")
 def whoami(request: Request):
     return {
-        "sub": request.headers.get("x-flareon-user-sub"),
-        "email": request.headers.get("x-flareon-user-email"),
-        "email_verified": request.headers.get("x-flareon-user-email-verified"),
-        "mode": request.headers.get("x-flareon-auth-mode"),
+        "sub": request.headers.get("x-flarelet-user-sub"),
+        "email": request.headers.get("x-flarelet-user-email"),
+        "email_verified": request.headers.get("x-flarelet-user-email-verified"),
+        "mode": request.headers.get("x-flarelet-auth-mode"),
         "function": os.environ.get("AWS_LAMBDA_FUNCTION_NAME"),
-        "version": os.environ.get("FLAREON_VERSION"),
+        "version": os.environ.get("FLARELET_VERSION"),
     }
 
 
@@ -44,13 +44,13 @@ def whoami(request: Request):
 async def db_put(key: str, request: Request):
     body = await request.json()
     _table().put_item(Item={"pk": "e2e", "sk": key, "value": body["value"]})
-    return {"ok": True, "table": os.environ["FLAREON_DATABASE_MAIN_TABLE"]}
+    return {"ok": True, "table": os.environ["FLARELET_DATABASE_MAIN_TABLE"]}
 
 
 @app.get("/db/{key}")
 def db_get(key: str):
     item = _table().get_item(Key={"pk": "e2e", "sk": key}).get("Item")
-    return {"value": item["value"] if item else None, "table": os.environ["FLAREON_DATABASE_MAIN_TABLE"]}
+    return {"value": item["value"] if item else None, "table": os.environ["FLARELET_DATABASE_MAIN_TABLE"]}
 
 
 @app.put("/files/{key}")
@@ -67,7 +67,7 @@ def file_get(key: str):
 @app.post("/ai")
 def ai():
     res = boto3.client("bedrock-runtime").invoke_model(
-        modelId=os.environ["FLAREON_AI_HAIKU_MODEL_ID"],
+        modelId=os.environ["FLARELET_AI_HAIKU_MODEL_ID"],
         body=json.dumps(
             {
                 "anthropic_version": "bedrock-2023-05-31",
@@ -77,7 +77,7 @@ def ai():
         ),
     )
     out = json.loads(res["body"].read())
-    return {"model": os.environ["FLAREON_AI_HAIKU_MODEL_ID"], "text": out["content"][0]["text"]}
+    return {"model": os.environ["FLARELET_AI_HAIKU_MODEL_ID"], "text": out["content"][0]["text"]}
 
 
 @app.get("/secret")

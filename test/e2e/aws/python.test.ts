@@ -30,7 +30,7 @@ import {
   urlFrom,
 } from "./helpers.js";
 
-const SCREENSHOTS = process.env.FLAREON_E2E_SCREENSHOTS ?? join(process.cwd(), ".flareon", "e2e");
+const SCREENSHOTS = process.env.FLARELET_E2E_SCREENSHOTS ?? join(process.cwd(), ".flarelet", "e2e");
 
 describe.runIf(ENABLED)("real AWS: python app with auth and bindings", () => {
   const app = uniqueName("py");
@@ -135,7 +135,7 @@ git:
       urls.v1 = urlFrom(r.stdout);
       await track(app, tracked);
       // CDK は cfn-exec ロールでスタックを作る。destroy はこのロールで削除する（CI ロールは削除対象への直接権限を持たない）
-      for (const s of [`flareon-${app}-prod`, `flareon-${app}-prod-v1`]) {
+      for (const s of [`flarelet-${app}-prod`, `flarelet-${app}-prod-v1`]) {
         expect(await stackRoleArn(s)).toMatch(
           /:role\/cdk-[a-z0-9]+-cfn-exec-role-\d{12}-ap-northeast-1$/,
         );
@@ -149,7 +149,7 @@ git:
     const nav = await get(`${url}/whoami`, { accept: "text/html" });
     expect(nav.status).toBe(302);
     const login = nav.headers.get("location")!;
-    expect(login).toContain("/__flareon/auth/login");
+    expect(login).toContain("/__flarelet/auth/login");
     const login2 = await get(new URL(login, url).href, { accept: "text/html" });
     expect(login2.status).toBe(302);
     const authorize = new URL(login2.headers.get("location")!);
@@ -160,14 +160,14 @@ git:
     const api = await get(`${url}/whoami`, { accept: "application/json" });
     expect(api.status).toBe(401);
     // クライアントが偽装した identity ヘッダは信用されない
-    const spoof = await get(`${url}/whoami`, { "x-flareon-user-email": "evil@example.com" });
+    const spoof = await get(`${url}/whoami`, { "x-flarelet-user-email": "evil@example.com" });
     expect(spoof.status).toBe(401);
   });
 
   it(
-    "PoC2: a user created in the pool signs in and the app sees x-flareon-user-email",
+    "PoC2: a user created in the pool signs in and the app sees x-flarelet-user-email",
     async () => {
-      const pool = (await stackOutputs(`flareon-${app}-prod`))?.UserPoolId;
+      const pool = (await stackOutputs(`flarelet-${app}-prod`))?.UserPoolId;
       expect(pool).toBeTruthy();
       const idp = new CognitoIdentityProviderClient({ region: REGION });
       await idp.send(
@@ -213,7 +213,7 @@ git:
   it(
     "allow: a user outside http.auth.allow is refused with 403 and gets no session",
     async () => {
-      const pool = (await stackOutputs(`flareon-${app}-prod`))?.UserPoolId;
+      const pool = (await stackOutputs(`flarelet-${app}-prod`))?.UserPoolId;
       const idp = new CognitoIdentityProviderClient({ region: REGION });
       await idp.send(
         new AdminCreateUserCommand({
@@ -234,7 +234,7 @@ git:
           Permanent: true,
         }),
       );
-      // 許可ユーザーの Cognito / Flareon セッションを持たない別のブラウザコンテキスト
+      // 許可ユーザーの Cognito / Flarelet セッションを持たない別のブラウザコンテキスト
       const other = await browser!.newContext();
       const page = await other.newPage();
       try {
@@ -243,7 +243,7 @@ git:
         await page.locator('input[name="username"]').fill(outsider);
         await page.locator('input[name="password"]').fill(password);
         const callback = page.waitForResponse(
-          (r) => r.url().startsWith(`${url}/__flareon/auth/callback`),
+          (r) => r.url().startsWith(`${url}/__flarelet/auth/callback`),
           {
             timeout: 60_000,
           },
@@ -254,7 +254,7 @@ git:
         await page.waitForLoadState();
         expect(await page.textContent("h1")).toBe("Access denied");
         expect(await page.textContent("body")).toContain(outsider);
-        expect(await page.locator('a[href="/__flareon/auth/logout"]').count()).toBe(1);
+        expect(await page.locator('a[href="/__flarelet/auth/logout"]').count()).toBe(1);
         const cookies = await other.cookies(url);
         expect(cookies.map((c) => c.name)).not.toContain(SESSION_COOKIE);
         // セッションが無いので API は 401 のまま
@@ -273,7 +273,7 @@ git:
   );
 
   it(
-    "PoC3: the app uses DynamoDB, S3 and Bedrock through Flareon bindings",
+    "PoC3: the app uses DynamoDB, S3 and Bedrock through Flarelet bindings",
     async () => {
       const url = urls.v1!;
       const put = await call(url, "put", "/db/shared", { value: "written-by-v1" });
@@ -297,7 +297,7 @@ git:
   );
 
   it(
-    "PoC3: flareon secret set makes the value available to the app as an env var",
+    "PoC3: flarelet secret set makes the value available to the app as an env var",
     async () => {
       const url = urls.v1!;
       expect(JSON.parse((await call(url, "get", "/secret")).body)).toEqual({
@@ -381,7 +381,7 @@ git:
         maxRedirects: 0,
       });
       expect(nav.status()).toBe(302);
-      expect(nav.headers()["location"]).toContain("/__flareon/auth/login");
+      expect(nav.headers()["location"]).toContain("/__flarelet/auth/login");
       // サインインし直せば使える（Cognito 側のセッションでフォームは出ない）
       const who = (await signIn(urls.v1!, "/whoami")) as Record<string, string>;
       expect(who).toMatchObject({ email, version: "v1" });
@@ -396,8 +396,8 @@ git:
       const r = await cli(["destroy", "--branch", "release/v2", ...target], dir);
       expect(r.code, r.stderr).toBe(0);
       expect(r.stdout).toContain("are kept");
-      expect(await stackOutputs(`flareon-${app}-prod-v2`)).toBeUndefined();
-      expect(await stackOutputs(`flareon-${app}-prod`)).toBeDefined();
+      expect(await stackOutputs(`flarelet-${app}-prod-v2`)).toBeUndefined();
+      expect(await stackOutputs(`flarelet-${app}-prod`)).toBeDefined();
       // v1 からはまだ読める（データは stage スコープで残る）
       expect(JSON.parse((await call(urls.v1!, "get", "/db/shared")).body).value).toBe(
         "written-by-v1",
@@ -407,7 +407,7 @@ git:
         dir,
       );
       expect(refuse.code).toBe(1);
-      expect(await stackOutputs(`flareon-${app}-prod-v1`)).toBeDefined();
+      expect(await stackOutputs(`flarelet-${app}-prod-v1`)).toBeDefined();
 
       const rm = await cli(["auth", "user", "remove", email, "--stage", "prod"], dir);
       expect(rm.code, rm.stderr).toBe(0);

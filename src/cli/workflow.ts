@@ -1,7 +1,7 @@
 import { parse as parseYaml } from "yaml";
 import type { GitIR, RuntimeLanguage } from "../ir/index.js";
 
-export const WORKFLOW_PATH = ".github/workflows/flareon.yml";
+export const WORKFLOW_PATH = ".github/workflows/flarelet.yml";
 
 export interface WorkflowOptions {
   runtime: RuntimeLanguage;
@@ -16,9 +16,9 @@ const q = (s: string): string =>
     : JSON.stringify(s);
 
 /**
- * Flareon のブランチパターンを GitHub Actions の branches フィルタのパターンに変換する。
+ * Flarelet のブランチパターンを GitHub Actions の branches フィルタのパターンに変換する。
  * `*`（`/` を跨がない）と `**`（跨ぐ）は GitHub と同じ意味なのでそのまま。
- * GitHub では `?` `+` `[` `]` と先頭の `!` が特殊だが Flareon では文字どおりなので、バックスラッシュでエスケープする。
+ * GitHub では `?` `+` `[` `]` と先頭の `!` が特殊だが Flarelet では文字どおりなので、バックスラッシュでエスケープする。
  * 根拠: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#filter-pattern-cheat-sheet
  */
 export function toActionsBranchPattern(pattern: string): string {
@@ -62,8 +62,8 @@ export function checkWorkflowDrift(
     new Set(actual).size === new Set(expected).size && expected.every((b) => actual.includes(b));
   if (same) return null;
   return (
-    `${WORKFLOW_PATH} on.push.branches [${actual.join(", ")}] differs from the git settings in flareon.yaml ` +
-    `([${expected.join(", ")}]). Run: flareon workflow generate --force`
+    `${WORKFLOW_PATH} on.push.branches [${actual.join(", ")}] differs from the git settings in flarelet.yaml ` +
+    `([${expected.join(", ")}]). Run: flarelet workflow generate --force`
   );
 }
 
@@ -71,7 +71,7 @@ export function checkWorkflowDrift(
  * GitHub Actions ワークフロー雛形。
  * - push（永続ブランチ）→ deploy、PR の opened/synchronize/reopened → preview deploy、closed → destroy
  * - AWS へは OIDC（長期アクセスキーなし）。ロール ARN とリージョンはリポジトリ変数
- * - Flareon は未公開のため、インストール元は FLAREON_PACKAGE（リポジトリ変数で上書き可）で指定する
+ * - Flarelet は未公開のため、インストール元は FLARELET_PACKAGE（リポジトリ変数で上書き可）で指定する
  */
 export function workflowTemplate({ runtime, branches }: WorkflowOptions): string {
   const install =
@@ -90,12 +90,12 @@ export function workflowTemplate({ runtime, branches }: WorkflowOptions): string
 ${install}
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: \${{ vars.FLAREON_AWS_ROLE_ARN }}
-          aws-region: \${{ vars.FLAREON_AWS_REGION }}
+          role-to-assume: \${{ vars.FLARELET_AWS_ROLE_ARN }}
+          aws-region: \${{ vars.FLARELET_AWS_REGION }}
 `;
-  return `# Generated from the git settings in flareon.yaml. After changing them, regenerate: flareon workflow generate --force
-# Setup: flareon bootstrap github --repo <owner>/<name>
-name: Flareon
+  return `# Generated from the git settings in flarelet.yaml. After changing them, regenerate: flarelet workflow generate --force
+# Setup: flarelet bootstrap github --repo <owner>/<name>
+name: Flarelet
 
 on:
   push:
@@ -112,13 +112,13 @@ permissions:
 
 # One run at a time per pull request (or branch); never cancel a deploy halfway.
 concurrency:
-  group: flareon-\${{ github.event.pull_request.number || github.ref }}
+  group: flarelet-\${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 env:
-  # Flareon is not published to npm yet. Set the repository variable FLAREON_PACKAGE
+  # Flarelet is not published to npm yet. Set the repository variable FLARELET_PACKAGE
   # (e.g. a tarball URL or git spec) to install it from elsewhere.
-  FLAREON_PACKAGE: \${{ vars.FLAREON_PACKAGE || 'flareon@latest' }}
+  FLARELET_PACKAGE: \${{ vars.FLARELET_PACKAGE || 'flarelet@latest' }}
 
 jobs:
   deploy:
@@ -132,13 +132,13 @@ jobs:
 ${awsSteps}
       - name: Deploy
         id: deploy
-        run: npx --yes "$FLAREON_PACKAGE" deploy --ci
+        run: npx --yes "$FLARELET_PACKAGE" deploy --ci
 
       - name: Report to GitHub
         if: \${{ !cancelled() }}
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-        run: npx --yes "$FLAREON_PACKAGE" github comment --state \${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
+        run: npx --yes "$FLARELET_PACKAGE" github comment --state \${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
 
   destroy:
     if: >-
@@ -149,11 +149,11 @@ ${awsSteps}
     steps:
 ${awsSteps}
       - name: Destroy preview
-        run: npx --yes "$FLAREON_PACKAGE" destroy --ci
+        run: npx --yes "$FLARELET_PACKAGE" destroy --ci
 
       - name: Report to GitHub
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-        run: npx --yes "$FLAREON_PACKAGE" github comment --state inactive
+        run: npx --yes "$FLARELET_PACKAGE" github comment --state inactive
 `;
 }

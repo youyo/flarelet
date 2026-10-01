@@ -35,7 +35,9 @@ http:
 `;
 const frontEnv = (version: Stack) => {
   const fns = Template.fromStack(version).findResources("AWS::Lambda::Function");
-  const front = Object.values(fns).find((f) => JSON.stringify(f).includes("FLAREON_AUTH_MODE")) as {
+  const front = Object.values(fns).find((f) =>
+    JSON.stringify(f).includes("FLARELET_AUTH_MODE"),
+  ) as {
     Properties: { Environment: { Variables: Record<string, unknown> } };
   };
   return front.Properties.Environment.Variables;
@@ -80,8 +82,8 @@ describe("external IdP: google", () => {
       ProviderType: "Google",
       UserPoolId: { Ref: Match.stringLikeRegexp("UserPool") },
       ProviderDetails: {
-        client_id: sm("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID"),
-        client_secret: sm("flareon/myapp/prod/auth/GOOGLE_CLIENT_SECRET"),
+        client_id: sm("flarelet/myapp/prod/auth/GOOGLE_CLIENT_ID"),
+        client_secret: sm("flarelet/myapp/prod/auth/GOOGLE_CLIENT_SECRET"),
         authorize_scopes: "openid email profile",
       },
       AttributeMapping: { email: "email", email_verified: "email_verified", "custom:hd": "hd" },
@@ -112,9 +114,9 @@ describe("external IdP: google", () => {
       prod,
     );
     expect(frontEnv(version)).toMatchObject({
-      FLAREON_AUTH_PROVIDER: "google",
-      FLAREON_AUTH_ALLOW_DOMAINS: "example.com,example.org",
-      FLAREON_AUTH_ALLOW_EMAILS: "a@gmail.com",
+      FLARELET_AUTH_PROVIDER: "google",
+      FLARELET_AUTH_ALLOW_DOMAINS: "example.com,example.org",
+      FLARELET_AUTH_ALLOW_EMAILS: "a@gmail.com",
     });
   });
 
@@ -125,8 +127,8 @@ describe("external IdP: google", () => {
     });
     Template.fromStack(stage!).hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
       ProviderDetails: {
-        client_id: sm("flareon/myapp/prod/auth/GOOGLE_CLIENT_ID", "v-id-1"),
-        client_secret: sm("flareon/myapp/prod/auth/GOOGLE_CLIENT_SECRET", "v-secret-2"),
+        client_id: sm("flarelet/myapp/prod/auth/GOOGLE_CLIENT_ID", "v-id-1"),
+        client_secret: sm("flarelet/myapp/prod/auth/GOOGLE_CLIENT_SECRET", "v-secret-2"),
       },
     });
   });
@@ -146,7 +148,7 @@ describe("external IdP: google", () => {
     });
     t.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
-        Variables: Match.objectLike({ FLAREON_COGNITO_IDENTITY_PROVIDER: "Google" }),
+        Variables: Match.objectLike({ FLARELET_COGNITO_IDENTITY_PROVIDER: "Google" }),
       },
     });
   });
@@ -165,8 +167,8 @@ describe("external IdP: oidc", () => {
       ProviderName: "Okta",
       ProviderType: "OIDC",
       ProviderDetails: Match.objectLike({
-        client_id: sm("flareon/myapp/prod/auth/OIDC_CLIENT_ID"),
-        client_secret: sm("flareon/myapp/prod/auth/OIDC_CLIENT_SECRET"),
+        client_id: sm("flarelet/myapp/prod/auth/OIDC_CLIENT_ID"),
+        client_secret: sm("flarelet/myapp/prod/auth/OIDC_CLIENT_SECRET"),
         oidc_issuer: "https://idp.example.com",
         authorize_scopes: "openid email profile",
       }),
@@ -196,8 +198,8 @@ describe("external IdP: entra", () => {
       ProviderName: "EntraID",
       ProviderType: "OIDC",
       ProviderDetails: {
-        client_id: sm("flareon/myapp/prod/auth/ENTRA_CLIENT_ID"),
-        client_secret: sm("flareon/myapp/prod/auth/ENTRA_CLIENT_SECRET"),
+        client_id: sm("flarelet/myapp/prod/auth/ENTRA_CLIENT_ID"),
+        client_secret: sm("flarelet/myapp/prod/auth/ENTRA_CLIENT_SECRET"),
         oidc_issuer: `https://login.microsoftonline.com/${TENANT}/v2.0`,
         authorize_scopes: "openid email profile",
         attributes_request_method: "GET",
@@ -213,9 +215,9 @@ describe("external IdP: entra", () => {
       SupportedIdentityProviders: ["EntraID"],
     });
     expect(frontEnv(version)).toMatchObject({
-      FLAREON_COGNITO_IDENTITY_PROVIDER: "EntraID",
-      FLAREON_AUTH_PROVIDER: "entra",
-      FLAREON_AUTH_ALLOW_DOMAINS: "contoso.com",
+      FLARELET_COGNITO_IDENTITY_PROVIDER: "EntraID",
+      FLARELET_AUTH_PROVIDER: "entra",
+      FLARELET_AUTH_ALLOW_DOMAINS: "contoso.com",
     });
   });
 });
@@ -226,10 +228,10 @@ describe("allow with the built-in Cognito sign-in", () => {
       "version: 1\nname: myapp\nruntime: { language: python }\nhttp:\n  auth:\n    allow: { emails: [a@example.com] }\n";
     const { stage, version } = build(yaml, prod);
     expect(frontEnv(version)).toMatchObject({
-      FLAREON_AUTH_PROVIDER: "cognito",
-      FLAREON_AUTH_ALLOW_EMAILS: "a@example.com",
+      FLARELET_AUTH_PROVIDER: "cognito",
+      FLARELET_AUTH_ALLOW_EMAILS: "a@example.com",
     });
-    expect(frontEnv(version)).not.toHaveProperty("FLAREON_AUTH_ALLOW_DOMAINS");
+    expect(frontEnv(version)).not.toHaveProperty("FLARELET_AUTH_ALLOW_DOMAINS");
     const plain = build(
       "version: 1\nname: myapp\nruntime: { language: python }\nhttp: true\n",
       prod,
@@ -239,7 +241,7 @@ describe("allow with the built-in Cognito sign-in", () => {
 
   it("PR previews (preview-token auth) do not get the allow lists", () => {
     const { version } = build(GOOGLE + "    allow: { domains: [example.com] }\n", pr);
-    expect(frontEnv(version)).not.toHaveProperty("FLAREON_AUTH_ALLOW_DOMAINS");
+    expect(frontEnv(version)).not.toHaveProperty("FLARELET_AUTH_ALLOW_DOMAINS");
   });
 });
 
@@ -253,8 +255,8 @@ describe("default cognito auth is unchanged", () => {
       SupportedIdentityProviders: ["COGNITO"],
     });
     const fns = t.findResources("AWS::Lambda::Function");
-    expect(JSON.stringify(fns)).not.toContain("FLAREON_COGNITO_IDENTITY_PROVIDER");
-    expect(JSON.stringify(fns)).not.toContain("FLAREON_AUTH_ALLOW_");
+    expect(JSON.stringify(fns)).not.toContain("FLARELET_COGNITO_IDENTITY_PROVIDER");
+    expect(JSON.stringify(fns)).not.toContain("FLARELET_AUTH_ALLOW_");
     expect(poolSchema(stage!).map((a) => a.Name)).toEqual(["email"]);
     const client = Object.values(t.findResources("AWS::Cognito::UserPoolClient"))[0]!.Properties;
     expect(client).not.toHaveProperty("ReadAttributes");
@@ -265,11 +267,11 @@ describe("default cognito auth is unchanged", () => {
 describe("naming and concepts", () => {
   it("idpSecretName is stage scoped", () => {
     expect(idpSecretName("myapp", "prod", "GOOGLE_CLIENT_ID")).toBe(
-      "flareon/myapp/prod/auth/GOOGLE_CLIENT_ID",
+      "flarelet/myapp/prod/auth/GOOGLE_CLIENT_ID",
     );
   });
 
   it("the identity provider is part of authentication", () => {
-    expect(conceptOf("flareon-myapp-prod/IdentityProvider/Resource")).toBe("authentication");
+    expect(conceptOf("flarelet-myapp-prod/IdentityProvider/Resource")).toBe("authentication");
   });
 });

@@ -3,7 +3,7 @@ import { githubApi, type DeploymentState, type GithubApi } from "../github/api.j
 import { errorMessage, type OpsDeps } from "./ops.js";
 import { resolveTarget, type SynthArgs } from "./synth.js";
 
-const PREVIEW_AUTH_PATH = "/__flareon/auth/preview";
+const PREVIEW_AUTH_PATH = "/__flarelet/auth/preview";
 
 export interface GithubDeps extends OpsDeps {
   github: (o: { token: string; apiUrl?: string }) => GithubApi;
@@ -20,7 +20,7 @@ export interface GithubCommentArgs extends SynthArgs {
 }
 
 /** PR コメントを 1 件に保つためのマーカー（アプリごと）。 */
-export const commentMarker = (app: string): string => `<!-- flareon:preview:${app} -->`;
+export const commentMarker = (app: string): string => `<!-- flarelet:preview:${app} -->`;
 
 interface View {
   app: string;
@@ -36,7 +36,7 @@ interface View {
 }
 
 function renderComment(v: View): string {
-  const head = `${commentMarker(v.app)}\n### Flareon preview: \`${v.app}\` (${v.stage}/${v.version})\n`;
+  const head = `${commentMarker(v.app)}\n### Flarelet preview: \`${v.app}\` (${v.stage}/${v.version})\n`;
   const sha = `Commit: \`${v.sha.slice(0, 7)}\``;
   const run = v.runUrl ? ` · [workflow run](${v.runUrl})` : "";
   if (v.state === "failure") {
@@ -50,10 +50,10 @@ function renderComment(v: View): string {
     lines.push(`**Access link (contains the preview token; keep it private):** ${v.link}`, "");
   } else if (v.protectedByToken) {
     lines.push(
-      "This preview is protected by Flareon preview auth. Get an access link with:",
+      "This preview is protected by Flarelet preview auth. Get an access link with:",
       "",
       "```",
-      `flareon env url --pr ${v.prNumber} --with-token`,
+      `flarelet env url --pr ${v.prNumber} --with-token`,
       "```",
       "",
     );
@@ -72,7 +72,7 @@ export async function runGithubComment(args: GithubCommentArgs, deps: GithubDeps
   const info = await deps.detectGit();
   const ci = info.ci;
   if (!ci?.repository || !ci.sha) {
-    io.stderr("Error: flareon github comment must run in GitHub Actions");
+    io.stderr("Error: flarelet github comment must run in GitHub Actions");
     return 1;
   }
   const repo = ci.repository;
@@ -151,7 +151,7 @@ export async function runGithubComment(args: GithubCommentArgs, deps: GithubDeps
       const id = await api.createDeployment(repo, {
         ref: ci.sha,
         environment,
-        description: `Flareon ${label}`,
+        description: `Flarelet ${label}`,
         transient: d.lifecycle === "ephemeral",
         production: d.stage === "prod",
       });

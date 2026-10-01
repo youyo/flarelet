@@ -47,7 +47,7 @@ export class FakeCloud implements Cloud {
     return this.stacks.get(name);
   }
   async listAppStacks(app: string) {
-    return [...this.stacks.values()].filter((s) => s.tags["flareon:app"] === app);
+    return [...this.stacks.values()].filter((s) => s.tags["flarelet:app"] === app);
   }
   oidcProvider: string | undefined;
   trustingRoles: string[] = [];
@@ -183,8 +183,8 @@ export interface Harness {
 }
 
 export async function harness(yaml: string, env: Record<string, string> = {}): Promise<Harness> {
-  const dir = await mkdtemp(join(tmpdir(), "flareon-ops-"));
-  const file = join(dir, "flareon.yaml");
+  const dir = await mkdtemp(join(tmpdir(), "flarelet-ops-"));
+  const file = join(dir, "flarelet.yaml");
   await writeFile(file, yaml);
   let clock = 1_000_000;
   const h: Harness = {

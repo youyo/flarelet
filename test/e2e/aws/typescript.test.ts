@@ -68,17 +68,17 @@ http: { auth: false }
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({
         app: "typescript",
-        message: "hello from flareon",
+        message: "hello from flarelet",
         version: "current",
       });
 
-      // auth: false は front auth が無い。アプリには FLAREON_AUTH_ENABLED=false が渡る（identity() は常に null）
+      // auth: false は front auth が無い。アプリには FLARELET_AUTH_ENABLED=false が渡る（identity() は常に null）
       const who = await get(`${url}/whoami`);
       expect(who.status).toBe(200);
       expect(await who.json()).toMatchObject({ authEnabled: "false" });
-      // CI ロールの Logs 権限（log-group:flareon-*）が実際のロググループ名に一致すること
-      const outputs = await stackOutputs(`flareon-${app}-prod-current`);
-      expect(outputs?.AppLogGroup).toMatch(/^flareon-/);
+      // CI ロールの Logs 権限（log-group:flarelet-*）が実際のロググループ名に一致すること
+      const outputs = await stackOutputs(`flarelet-${app}-prod-current`);
+      expect(outputs?.AppLogGroup).toMatch(/^flarelet-/);
     },
     LONG,
   );
@@ -88,7 +88,7 @@ http: { auth: false }
     async () => {
       const r = await cli(["plan", "--branch", "main", "--default-branch", "main"], dir);
       expect(r.code, r.stderr).toBe(0);
-      expect(r.stdout).toContain(`Flareon will update ${app} (prod/current)`);
+      expect(r.stdout).toContain(`Flarelet will update ${app} (prod/current)`);
       expect(r.stdout).toContain("= application version current");
       expect(r.stdout).toContain("No changes");
     },
@@ -153,7 +153,7 @@ http: { auth: false }
       const r = await cli(["destroy", "--stage", "prod", "--version", "current"], dir);
       log(`destroy ${app}: exit ${r.code} in ${r.ms}ms`);
       expect(r.code, r.stderr).toBe(0);
-      expect(await stackOutputs(`flareon-${app}-prod-current`)).toBeUndefined();
+      expect(await stackOutputs(`flarelet-${app}-prod-current`)).toBeUndefined();
       const list = await cli(["env", "list"], dir);
       expect(list.stdout).toContain("No environments");
     },

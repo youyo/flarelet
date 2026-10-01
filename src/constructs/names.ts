@@ -8,7 +8,7 @@ export interface StackNames {
 }
 
 export function stackNames(app: string, d: Deployment): StackNames {
-  const stage = `flareon-${app}-${d.stage}`;
+  const stage = `flarelet-${app}-${d.stage}`;
   return d.lifecycle === "ephemeral"
     ? { stage: undefined, version: `${stage}-${d.version}` }
     : { stage, version: `${stage}-${d.version}` };
@@ -36,7 +36,7 @@ export function domainPrefix(app: string, stage: string, account?: string): stri
 }
 
 export const secretsPath = (app: string, stage: string): string =>
-  `/flareon/${app}/${stage}/secrets/`;
+  `/flarelet/${app}/${stage}/secrets/`;
 
 /**
  * セッション世代の SSM パラメータ（String）。front Lambda はこのバージョンをセッションに入れ、変わったセッションを拒否する。
@@ -44,9 +44,9 @@ export const secretsPath = (app: string, stage: string): string =>
  */
 export const sessionEpochParam = (app: string, d: Deployment): string =>
   d.lifecycle === "ephemeral"
-    ? `/flareon/${app}/${d.stage}/auth/${d.version}/session-epoch`
-    : `/flareon/${app}/${d.stage}/auth/session-epoch`;
+    ? `/flarelet/${app}/${d.stage}/auth/${d.version}/session-epoch`
+    : `/flarelet/${app}/${d.stage}/auth/session-epoch`;
 
 /** 外部 IdP の資格情報（Secrets Manager のシークレット名）。stage スコープ。 */
 export const idpSecretName = (app: string, stage: string, name: string): string =>
-  `flareon/${app}/${stage}/auth/${name}`;
+  `flarelet/${app}/${stage}/auth/${name}`;

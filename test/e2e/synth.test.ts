@@ -11,8 +11,8 @@ const EXAMPLES = resolve(import.meta.dirname, "../../examples");
 // Docker / pip / npm を避けるため、既定ではバンドルをスキップする。
 const BASE_ENV = {
   ...process.env,
-  FLAREON_SKIP_BUNDLING: "1",
-  FLAREON_OFFLINE: "1",
+  FLARELET_SKIP_BUNDLING: "1",
+  FLARELET_OFFLINE: "1",
   AWS_REGION: "us-east-1",
 };
 
@@ -53,7 +53,7 @@ type Template = {
   Resources: Record<string, { Type: string; DeletionPolicy?: string; Properties: Props }>;
 };
 const readTemplate = async (dir: string, stack: string): Promise<Template> =>
-  JSON.parse(await readFile(join(dir, ".flareon", "out", `${stack}.template.json`), "utf8"));
+  JSON.parse(await readFile(join(dir, ".flarelet", "out", `${stack}.template.json`), "utf8"));
 const types = (t: Template) => Object.values(t.Resources).map((r) => r.Type);
 const count = (t: Template, type: string) => types(t).filter((x) => x === type).length;
 const fns = (t: Template) =>
@@ -65,13 +65,13 @@ const statements = (t: Template) =>
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flareon-e2e-synth-"));
+  dir = await mkdtemp(join(tmpdir(), "flarelet-e2e-synth-"));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("flareon init -> synth (typescript)", () => {
+describe("flarelet init -> synth (typescript)", () => {
   beforeEach(async () => {
     const r = await run(["init", "--runtime", "typescript", dir], tmpdir());
     expect(r.code).toBe(0);
@@ -81,14 +81,14 @@ describe("flareon init -> synth (typescript)", () => {
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
 
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta.stage).toBe("prod");
     expect(meta.version).toBe("v1");
     expect(meta.stacks.map((s: { name: string }) => s.name)).toHaveLength(2);
     const [stageName, versionName] = meta.stacks.map((s: { name: string }) => s.name);
     expect(versionName).toBe(`${stageName}-v1`);
 
-    const out = await readdir(join(dir, ".flareon", "out"));
+    const out = await readdir(join(dir, ".flarelet", "out"));
     expect(out).toContain("manifest.json");
     expect(out).toContain(`${stageName}.template.json`);
 
@@ -113,20 +113,20 @@ describe("flareon init -> synth (typescript)", () => {
         .map((f) => f.Properties.Runtime)
         .sort(),
     ).toEqual(["nodejs24.x", "nodejs24.x"]);
-    const app = fns(version).find((f) => f.Properties.Handler === "flareon-launcher.sh")!;
+    const app = fns(version).find((f) => f.Properties.Handler === "flarelet-launcher.sh")!;
     expect(app.Properties.Architectures).toEqual(["arm64"]);
     expect(app.Properties.Layers[0]).toMatch(/:753240598075:layer:LambdaAdapterLayerArm64:\d+$/);
     expect(app.Properties.Environment.Variables).toMatchObject({
       AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
       PORT: "8080",
-      FLAREON_STAGE: "prod",
-      FLAREON_VERSION: "v1",
+      FLARELET_STAGE: "prod",
+      FLARELET_VERSION: "v1",
     });
   });
 
   it("grants least-privilege IAM to the app Lambda", async () => {
     await run(["synth", "--stage", "prod", "--version", "v1"], dir);
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     const version = await readTemplate(dir, meta.stacks[1].name);
     const all = statements(version);
     for (const s of all) {
@@ -142,14 +142,14 @@ describe("flareon init -> synth (typescript)", () => {
   });
 
   it("auth: false removes the front auth Lambda and Cognito client", async () => {
-    const f = join(dir, "flareon.yaml");
+    const f = join(dir, "flarelet.yaml");
     await writeFile(
       f,
       (await readFile(f, "utf8")).replace("http:\n  auth: true", "http:\n  auth: false"),
     );
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir);
     expect(r.code, r.stderr).toBe(0);
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     const version = await readTemplate(dir, meta.stacks[1].name);
     expect(fns(version)).toHaveLength(1);
     expect(count(version, "AWS::Cognito::UserPoolClient")).toBe(0);
@@ -161,7 +161,7 @@ describe("flareon init -> synth (typescript)", () => {
   it("--pr produces a single ephemeral stack with Preview Auth and disposable data", async () => {
     const r = await run(["synth", "--pr", "12"], dir);
     expect(r.code, r.stderr).toBe(0);
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta).toMatchObject({ stage: "preview", version: "pr-12", lifecycle: "ephemeral" });
     expect(meta.stacks).toHaveLength(1);
     const t = await readTemplate(dir, meta.stacks[0].name);
@@ -176,29 +176,29 @@ describe("flareon init -> synth (typescript)", () => {
     const front = fns(t).find(
       (f) =>
         f.Properties.Handler === "index.handler" &&
-        f.Properties.Environment?.Variables?.FLAREON_AUTH_MODE,
+        f.Properties.Environment?.Variables?.FLARELET_AUTH_MODE,
     );
-    expect(front?.Properties.Environment.Variables.FLAREON_AUTH_MODE).toBe("preview");
+    expect(front?.Properties.Environment.Variables.FLARELET_AUTH_MODE).toBe("preview");
   });
 
   it("auth: false does not make a PR preview public: Preview Auth is forced", async () => {
-    const f = join(dir, "flareon.yaml");
+    const f = join(dir, "flarelet.yaml");
     await writeFile(
       f,
       (await readFile(f, "utf8")).replace("http:\n  auth: true", "http:\n  auth: false"),
     );
     const r = await run(["synth", "--pr", "7"], dir);
     expect(r.code, r.stderr).toBe(0);
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta).toMatchObject({ stage: "preview", version: "pr-7", lifecycle: "ephemeral" });
     const t = await readTemplate(dir, meta.stacks[0].name);
     // S3 自動削除のカスタムリソースも index.handler なので、環境変数を持つものを選ぶ
     const env = (h: string) =>
       fns(t).find((x) => x.Properties.Handler === h && x.Properties.Environment)?.Properties
         .Environment.Variables ?? {};
-    expect(env("index.handler").FLAREON_AUTH_MODE).toBe("preview");
-    expect(env("index.handler").FLAREON_PREVIEW_TOKEN_SECRET_ARN).toBeDefined();
-    expect(env("flareon-launcher.sh").FLAREON_AUTH_ENABLED).toBe("true");
+    expect(env("index.handler").FLARELET_AUTH_MODE).toBe("preview");
+    expect(env("index.handler").FLARELET_PREVIEW_TOKEN_SECRET_ARN).toBeDefined();
+    expect(env("flarelet-launcher.sh").FLARELET_AUTH_ENABLED).toBe("true");
     expect(count(t, "AWS::SecretsManager::Secret")).toBe(2);
     expect(count(t, "AWS::Lambda::Permission")).toBe(1);
 
@@ -215,13 +215,13 @@ describe("flareon init -> synth (typescript)", () => {
   it("only preview/pr-N is ephemeral (explicit --stage preview --version pr-N included)", async () => {
     const explicit = await run(["synth", "--stage", "preview", "--version", "pr-8"], dir);
     expect(explicit.code, explicit.stderr).toBe(0);
-    const meta1 = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta1 = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta1).toMatchObject({ stage: "preview", version: "pr-8", lifecycle: "ephemeral" });
     expect(meta1.stacks).toHaveLength(1);
 
     const prod = await run(["synth", "--stage", "prod", "--version", "pr-5"], dir);
     expect(prod.code, prod.stderr).toBe(0);
-    const meta2 = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta2 = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta2).toMatchObject({ stage: "prod", version: "pr-5", lifecycle: "persistent" });
     expect(meta2.stacks).toHaveLength(2);
   });
@@ -232,17 +232,17 @@ describe("flareon init -> synth (typescript)", () => {
     expect(r.stderr).toContain("does not match any deployment target");
   });
 
-  it("plan prints the deployment in Flareon terms", async () => {
+  it("plan prints the deployment in Flarelet terms", async () => {
     const r = await run(["plan", "--stage", "prod", "--version", "v2"], dir);
     expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout).toContain("Flareon will create");
+    expect(r.stdout).toContain("Flarelet will create");
     expect(r.stdout).toContain("(prod/v2)");
     expect(r.stdout).toContain("+ application version v2");
     expect(r.stdout).toContain("+ database.main");
     expect(r.stdout).toContain("+ storage.files");
     expect(r.stdout).toContain("+ authentication");
     expect(r.stdout).toContain("+ ai.sonnet");
-    expect(r.stdout).toContain("flareon deploy --stage prod --version v2");
+    expect(r.stdout).toContain("flarelet deploy --stage prod --version v2");
     expect(r.stdout).not.toMatch(/AWS::/);
   });
 
@@ -252,7 +252,7 @@ describe("flareon init -> synth (typescript)", () => {
     await git(["commit", "-m", "init"], dir);
     const r = await run(["synth"], dir);
     expect(r.code, r.stderr).toBe(0);
-    const meta = JSON.parse(await readFile(join(dir, ".flareon", "metadata.json"), "utf8"));
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
     expect(meta).toMatchObject({ stage: "prod", version: "current" });
 
     await git(["checkout", "-b", "feature/x"], dir);
@@ -261,8 +261,8 @@ describe("flareon init -> synth (typescript)", () => {
     expect(r2.stderr).toContain('branch "feature/x"');
   });
 
-  it("init refuses to overwrite and .gitignore ignores .flareon/", async () => {
-    expect(await readFile(join(dir, ".gitignore"), "utf8")).toContain(".flareon/");
+  it("init refuses to overwrite and .gitignore ignores .flarelet/", async () => {
+    expect(await readFile(join(dir, ".gitignore"), "utf8")).toContain(".flarelet/");
     const r = await run(["init", "--runtime", "typescript", dir], tmpdir());
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("already exists");
@@ -272,7 +272,7 @@ describe("flareon init -> synth (typescript)", () => {
 describe("real bundling (no skip)", () => {
   it("bundles a dependency-free typescript app and the front auth Lambda with esbuild", async () => {
     await writeFile(
-      join(dir, "flareon.yaml"),
+      join(dir, "flarelet.yaml"),
       "version: 1\nname: bundled\nruntime: { language: typescript }\nhttp: true\n",
     );
     await mkdir(join(dir, "app"));
@@ -282,20 +282,20 @@ describe("real bundling (no skip)", () => {
       AWS_REGION: "us-east-1",
     });
     expect(r.code, r.stderr).toBe(0);
-    const assets = (await readdir(join(dir, ".flareon", "out"))).filter((n) =>
+    const assets = (await readdir(join(dir, ".flarelet", "out"))).filter((n) =>
       n.startsWith("asset."),
     );
     expect(assets.length).toBeGreaterThanOrEqual(2);
     const bundles = await Promise.all(
       assets.map(async (a) => {
-        const d = join(dir, ".flareon", "out", a);
+        const d = join(dir, ".flarelet", "out", a);
         return existsSync(join(d, "index.mjs")) ? readFile(join(d, "index.mjs"), "utf8") : "";
       }),
     );
     expect(bundles.some((b) => b.includes("hello from bundled app"))).toBe(true);
     expect(bundles.some((b) => b.includes("handler"))).toBe(true); // front auth
     const launcherDirs = assets.filter((a) =>
-      existsSync(join(dir, ".flareon", "out", a, "flareon-launcher.sh")),
+      existsSync(join(dir, ".flarelet", "out", a, "flarelet-launcher.sh")),
     );
     expect(launcherDirs).toHaveLength(1);
   });
@@ -310,13 +310,13 @@ describe("examples", () => {
       expect(v.code, v.stderr).toBe(0);
       const r = await run(["synth", "--stage", "prod", "--version", "v1"], work);
       expect(r.code, r.stderr).toBe(0);
-      const meta = JSON.parse(await readFile(join(work, ".flareon", "metadata.json"), "utf8"));
+      const meta = JSON.parse(await readFile(join(work, ".flarelet", "metadata.json"), "utf8"));
       const version = await readTemplate(work, meta.stacks[1].name);
-      const app = fns(version).find((f) => f.Properties.Handler === "flareon-launcher.sh")!;
-      expect(app.Properties.Environment.Variables.FLAREON_SECRETS_PATH).toMatch(/\/secrets\/$/);
+      const app = fns(version).find((f) => f.Properties.Handler === "flarelet-launcher.sh")!;
+      expect(app.Properties.Environment.Variables.FLARELET_SECRETS_PATH).toMatch(/\/secrets\/$/);
       expect(
         Object.keys(app.Properties.Environment.Variables).some((k) =>
-          k.startsWith("FLAREON_DATABASE_NOTES"),
+          k.startsWith("FLARELET_DATABASE_NOTES"),
         ),
       ).toBe(true);
     });

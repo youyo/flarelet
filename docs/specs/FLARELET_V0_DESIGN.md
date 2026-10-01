@@ -1,22 +1,22 @@
-# Flareon v0 Design Specification
+# Flarelet v0 Design Specification
 
 > Cloudflare-like developer experience on AWS Serverless.
 
 ## 1. Vision
 
-Flareon is an AWS Serverless Application Platform that lets developers deploy applications without writing AWS infrastructure code.
+Flarelet is an AWS Serverless Application Platform that lets developers deploy applications without writing AWS infrastructure code.
 
 The normal user-facing surface is intentionally small:
 
 ```text
-flareon.yaml
+flarelet.yaml
 application code
-flareon CLI
+flarelet CLI
 ```
 
 Users should not normally need to write or understand CDK, CloudFormation, IAM, API Gateway, Lambda packaging, DynamoDB tables, Cognito, or CloudWatch configuration.
 
-Flareon is **not** a generic AWS abstraction layer and **not** another CDK construct library. Its product is the developer experience: `dev`, `deploy`, authentication, bindings, previews, logs, secrets, environments, and safe serverless defaults.
+Flarelet is **not** a generic AWS abstraction layer and **not** another CDK construct library. Its product is the developer experience: `dev`, `deploy`, authentication, bindings, previews, logs, secrets, environments, and safe serverless defaults.
 
 ### Core principles
 
@@ -26,8 +26,8 @@ Flareon is **not** a generic AWS abstraction layer and **not** another CDK const
 4. **AWS native underneath.** Prefer AWS CDK + CloudFormation for provisioning stability and state management.
 5. **Safe defaults.** HTTP applications are authenticated by default.
 6. **Git is first-class.** Branches and pull requests resolve naturally into stages and versions.
-7. **Transparent, not exposed.** Generated Cloud Assembly remains inspectable under `.flareon/out/`, but normal users should not need it.
-8. **Narrow Golden Path.** Do not turn Flareon into a universal AWS framework.
+7. **Transparent, not exposed.** Generated Cloud Assembly remains inspectable under `.flarelet/out/`, but normal users should not need it.
+8. **Narrow Golden Path.** Do not turn Flarelet into a universal AWS framework.
 
 ---
 
@@ -39,7 +39,7 @@ Flareon is **not** a generic AWS abstraction layer and **not** another CDK const
 - Configuration: **YAML**
 - IaC engine: **AWS CDK**
 - Provisioning/state engine: **AWS CloudFormation**
-- Generated artifacts: **`.flareon/out/`**
+- Generated artifacts: **`.flarelet/out/`**
 
 ### Why TypeScript
 
@@ -49,7 +49,7 @@ A standalone/single-executable distribution remains a desirable packaging goal, 
 
 ### Why CloudFormation
 
-Flareon deliberately does **not** own infrastructure state in v0. CloudFormation remains responsible for:
+Flarelet deliberately does **not** own infrastructure state in v0. CloudFormation remains responsible for:
 
 - resource state
 - dependency execution
@@ -66,25 +66,25 @@ A cdkd-like direct AWS API deployment engine may be investigated later for faste
 ## 3. Architecture
 
 ```text
-flareon.yaml
+flarelet.yaml
      │
      ▼
 Config Parser + Schema Validation
      │
      ▼
-Flareon IR
+Flarelet IR
      │
      ▼
 Deployment Resolver / Planner
      │
      ▼
-Flareon Constructs
+Flarelet Constructs
      │
      ▼
 AWS CDK
      │
      ▼
-.flareon/out/ (Cloud Assembly)
+.flarelet/out/ (Cloud Assembly)
      │
      ▼
 CloudFormation
@@ -93,7 +93,7 @@ CloudFormation
 Customer AWS Account
 ```
 
-The YAML schema must never be passed directly into CDK. The **Flareon IR** is the stable boundary between the public configuration API and provisioning implementation.
+The YAML schema must never be passed directly into CDK. The **Flarelet IR** is the stable boundary between the public configuration API and provisioning implementation.
 
 ---
 
@@ -103,7 +103,7 @@ The YAML schema must never be passed directly into CDK. The **Flareon IR** is th
 |---|---|
 | HTTP | API Gateway HTTP API |
 | Compute | Lambda + Lambda Web Adapter |
-| Authentication | Flareon Auth + Cognito User Pool / Managed Login |
+| Authentication | Flarelet Auth + Cognito User Pool / Managed Login |
 | Database | DynamoDB |
 | Storage | S3 |
 | AI | Amazon Bedrock |
@@ -119,7 +119,7 @@ ECS, EKS, EC2, RDS, arbitrary VPC design, Terraform, multi-cloud, and a custom s
 
 ---
 
-## 5. `flareon.yaml` v0
+## 5. `flarelet.yaml` v0
 
 A representative application:
 
@@ -203,7 +203,7 @@ database:
   sessions: {}
 ```
 
-Flareon creates the required DynamoDB resources, grants least-privilege access, and exposes binding metadata. It does not create a replacement database SDK in v0.
+Flarelet creates the required DynamoDB resources, grants least-privilege access, and exposes binding metadata. It does not create a replacement database SDK in v0.
 
 ### Storage
 
@@ -213,7 +213,7 @@ storage:
   exports: {}
 ```
 
-Flareon creates S3 resources and corresponding bindings/IAM permissions.
+Flarelet creates S3 resources and corresponding bindings/IAM permissions.
 
 ### AI
 
@@ -224,7 +224,7 @@ ai:
     - nova-micro
 ```
 
-Logical model names are resolved through a Flareon model registry to concrete Bedrock model identifiers. Applications should not need to embed changing Bedrock model IDs in configuration.
+Logical model names are resolved through a Flarelet model registry to concrete Bedrock model identifiers. Applications should not need to embed changing Bedrock model IDs in configuration.
 
 ### Secrets
 
@@ -233,12 +233,12 @@ secrets:
   - EXTERNAL_API_KEY
 ```
 
-Secret values never belong in `flareon.yaml`.
+Secret values never belong in `flarelet.yaml`.
 
 ```bash
-flareon secret set EXTERNAL_API_KEY
-flareon secret list
-flareon secret delete EXTERNAL_API_KEY
+flarelet secret set EXTERNAL_API_KEY
+flarelet secret list
+flarelet secret delete EXTERNAL_API_KEY
 ```
 
 The application consumes them as normal environment variables.
@@ -257,7 +257,7 @@ The desired experience is analogous to placing Cloudflare Access in front of an 
 Browser
    │
    ▼
-Flareon Auth Layer
+Flarelet Auth Layer
    │
    ├── unauthenticated ──► Cognito Managed Login
    │                           │
@@ -269,14 +269,14 @@ Flareon Auth Layer
 Application
 ```
 
-Cognito acts as the identity/federation engine. Flareon owns the application-protection experience: redirects, callback handling, session behavior, and exposing authenticated identity to the application.
+Cognito acts as the identity/federation engine. Flarelet owns the application-protection experience: redirects, callback handling, session behavior, and exposing authenticated identity to the application.
 
 Possible internal endpoints:
 
 ```text
-/__flareon/auth/login
-/__flareon/auth/callback
-/__flareon/auth/logout
+/__flarelet/auth/login
+/__flarelet/auth/callback
+/__flarelet/auth/logout
 ```
 
 ### Configuration
@@ -302,21 +302,21 @@ http:
     provider: oidc
 ```
 
-Credentials are supplied through Flareon secrets rather than YAML.
+Credentials are supplied through Flarelet secrets rather than YAML.
 
 ### Application identity
 
-Flareon should expose normalized identity to applications, for example through runtime bindings or trusted request context/headers. Applications should not have to implement the OIDC flow themselves.
+Flarelet should expose normalized identity to applications, for example through runtime bindings or trusted request context/headers. Applications should not have to implement the OIDC flow themselves.
 
 ### Custom domains
 
-Custom domains are **not a v0 product priority**. They may be implemented if required for a clean authentication/callback architecture. The default Flareon deployment should work without requiring the user to own/configure a domain.
+Custom domains are **not a v0 product priority**. They may be implemented if required for a clean authentication/callback architecture. The default Flarelet deployment should work without requiring the user to own/configure a domain.
 
 ---
 
 ## 7. Deployment model: App → Stage → Version
 
-This is a fundamental Flareon concept.
+This is a fundamental Flarelet concept.
 
 ```text
 Application
@@ -350,20 +350,20 @@ Deployment Resolver
        └── version
               │
               ▼
-        Flareon Deployment
+        Flarelet Deployment
 ```
 
 This keeps the model usable outside GitHub as well:
 
 ```bash
-flareon deploy --stage prod --version v3
+flarelet deploy --stage prod --version v3
 ```
 
 ---
 
 ## 8. Git integration
 
-Git integration is a first-class Flareon feature rather than CI glue added later.
+Git integration is a first-class Flarelet feature rather than CI glue added later.
 
 ### Default behavior
 
@@ -434,7 +434,7 @@ The resulting URL should be surfaced directly in the GitHub PR through a Check, 
 
 ### Execution model
 
-The preferred v0 architecture avoids requiring a central Flareon SaaS control plane:
+The preferred v0 architecture avoids requiring a central Flarelet SaaS control plane:
 
 ```text
 GitHub event
@@ -447,7 +447,7 @@ GitHub Actions
 Customer AWS account
     │
     ▼
-flareon deploy
+flarelet deploy
 ```
 
 GitHub Actions uses OIDC to assume an AWS IAM role, avoiding long-lived AWS access keys.
@@ -460,7 +460,7 @@ A GitHub App may later improve installation, repository access checks, PR UI, an
 
 Production authentication and ephemeral preview authentication have different constraints.
 
-Dynamic PR URLs can be awkward for external OAuth/OIDC callback allowlists. Therefore Flareon may use a simpler preview-specific authentication mode.
+Dynamic PR URLs can be awkward for external OAuth/OIDC callback allowlists. Therefore Flarelet may use a simpler preview-specific authentication mode.
 
 Recommended policy:
 
@@ -469,7 +469,7 @@ production / persistent stage
     → Cognito + configured federated identity
 
 PR preview
-    → Flareon Preview Auth
+    → Flarelet Preview Auth
 ```
 
 Initial Preview Auth may be simple password/token protection. A stronger future option is GitHub authentication combined with repository-access authorization:
@@ -492,7 +492,7 @@ The key v0 requirement is that PR previews are **not accidentally unauthenticate
 
 Versioned serverless deployments make it cheap and useful to create multiple stacks, but stateful resources should not always be duplicated with compute.
 
-Flareon therefore distinguishes **stage-scoped** and **version-scoped** resources.
+Flarelet therefore distinguishes **stage-scoped** and **version-scoped** resources.
 
 Recommended defaults for persistent stages:
 
@@ -566,13 +566,13 @@ prod/v2  (new)
 A future command could switch routing rather than mutate the old compute deployment:
 
 ```bash
-flareon promote prod/v2
+flarelet promote prod/v2
 ```
 
 and rollback could switch traffic back to an already-deployed version:
 
 ```bash
-flareon rollback
+flarelet rollback
 ```
 
 This is different from relying solely on CloudFormation rollback: it treats deployed application versions as first-class entities.
@@ -583,7 +583,7 @@ Promotion/traffic switching is not required for the first PoC, but the v0 resour
 
 ## 12. Local development
 
-`flareon dev` is a core product experience.
+`flarelet dev` is a core product experience.
 
 Recommended model:
 
@@ -592,7 +592,7 @@ Developer machine
 │
 ├── local application (FastAPI / Hono / etc.)
 │
-└── Flareon bindings
+└── Flarelet bindings
         │
         ▼
 AWS development/preview resources
@@ -606,9 +606,9 @@ Do not make LocalStack, DynamoDB Local, or a complete AWS emulator a v0 dependen
 Example UX:
 
 ```text
-$ flareon dev
+$ flarelet dev
 
-Flareon dev
+Flarelet dev
 
 App       myapp
 Stage     preview
@@ -628,7 +628,7 @@ Watching...
 
 ## 13. Runtime bindings
 
-Flareon is responsible for:
+Flarelet is responsible for:
 
 - resource discovery
 - normalized configuration
@@ -640,7 +640,7 @@ It should **not** reimplement AWS service APIs in v0.
 Example TypeScript concept:
 
 ```ts
-import { bindings } from "@flareon/runtime";
+import { bindings } from "@flarelet/runtime";
 
 const db = bindings.database("main");
 const storage = bindings.storage("files");
@@ -655,32 +655,32 @@ Secrets may simply appear as environment variables.
 ## 14. CLI v0
 
 ```text
-flareon init
-flareon dev
+flarelet init
+flarelet dev
 
-flareon plan
-flareon deploy
-flareon destroy
+flarelet plan
+flarelet deploy
+flarelet destroy
 
-flareon env list
+flarelet env list
 
-flareon logs
+flarelet logs
 
-flareon secret set
-flareon secret list
-flareon secret delete
+flarelet secret set
+flarelet secret list
+flarelet secret delete
 
-flareon synth
+flarelet synth
 ```
 
-### `flareon plan`
+### `flarelet plan`
 
-`plan` should translate infrastructure changes back into Flareon concepts rather than dumping raw CloudFormation noise.
+`plan` should translate infrastructure changes back into Flarelet concepts rather than dumping raw CloudFormation noise.
 
 Example:
 
 ```text
-Flareon will update myapp (prod/v2)
+Flarelet will update myapp (prod/v2)
 
   + application version v2
   = database.main
@@ -690,10 +690,10 @@ Flareon will update myapp (prod/v2)
 1 deployment change
 
 Deploy with:
-  flareon deploy --stage prod --version v2
+  flarelet deploy --stage prod --version v2
 ```
 
-### `flareon env list`
+### `flarelet env list`
 
 Example:
 
@@ -713,27 +713,27 @@ Application repository:
 
 ```text
 myapp/
-├── flareon.yaml
+├── flarelet.yaml
 ├── app/
 ├── .github/
 │   └── workflows/
-│       └── flareon.yml
-└── .flareon/
+│       └── flarelet.yml
+└── .flarelet/
     ├── out/
     ├── cache/
     └── metadata.json
 ```
 
-`.flareon/out/` contains the generated CDK Cloud Assembly and related artifacts. `flareon synth` exposes this layer for debugging and inspection.
+`.flarelet/out/` contains the generated CDK Cloud Assembly and related artifacts. `flarelet synth` exposes this layer for debugging and inspection.
 
 ---
 
-## 16. Suggested Flareon repository structure
+## 16. Suggested Flarelet repository structure
 
 Keep the initial repository relatively simple:
 
 ```text
-flareon/
+flarelet/
 ├── src/
 │   ├── cli/
 │   ├── config/
@@ -758,15 +758,15 @@ Avoid premature package/monorepo fragmentation. Split packages only when the run
 
 ### Must have
 
-- TypeScript Flareon CLI
-- `flareon.yaml` parser/schema
-- Flareon IR
+- TypeScript Flarelet CLI
+- `flarelet.yaml` parser/schema
+- Flarelet IR
 - CDK/CloudFormation synthesis and deployment
-- `.flareon/out/`
+- `.flarelet/out/`
 - Lambda + Lambda Web Adapter
 - API Gateway HTTP API
 - authenticated HTTP applications
-- Cognito-backed Flareon Auth for persistent environments
+- Cognito-backed Flarelet Auth for persistent environments
 - preview-safe authentication
 - DynamoDB binding
 - S3 binding
@@ -801,9 +801,9 @@ Avoid premature package/monorepo fragmentation. Split packages only when the run
 ### PoC 1 — Basic deployment
 
 ```text
-flareon.yaml
+flarelet.yaml
    ↓
-flareon deploy
+flarelet deploy
    ↓
 API Gateway + Lambda/LWA
    ↓
@@ -815,7 +815,7 @@ working HTTPS URL
 ```text
 http.auth: true
    ↓
-Cognito + Flareon Auth
+Cognito + Flarelet Auth
    ↓
 open URL
    ↓
@@ -854,7 +854,7 @@ PR update redeploys
 PR close destroys preview
 ```
 
-If this workflow feels fast and boring to use, the core Flareon thesis is validated.
+If this workflow feels fast and boring to use, the core Flarelet thesis is validated.
 
 ---
 
@@ -882,8 +882,8 @@ Deployment speed is expected to be one of the largest differences versus Cloudfl
 
 These should be treated as design guardrails:
 
-1. A user should not need to know which AWS service implements a normal Flareon capability.
-2. Flareon IR is the boundary between public configuration and CDK implementation.
+1. A user should not need to know which AWS service implements a normal Flarelet capability.
+2. Flarelet IR is the boundary between public configuration and CDK implementation.
 3. CloudFormation owns infrastructure state in v0.
 4. Git refs resolve to `stage + version`; Git branch names are not themselves the infrastructure model.
 5. Stateful production resources are not duplicated per version by default.
@@ -899,17 +899,17 @@ These should be treated as design guardrails:
 
 A concise working definition:
 
-> **Flareon is a serverless application platform for AWS. Define what your application needs in YAML, push your code, and Flareon handles infrastructure, authentication, previews, deployment, and runtime bindings.**
+> **Flarelet is a serverless application platform for AWS. Define what your application needs in YAML, push your code, and Flarelet handles infrastructure, authentication, previews, deployment, and runtime bindings.**
 
 The intended developer mental model is:
 
 ```text
-flareon.yaml
+flarelet.yaml
 
-flareon init
-flareon dev
-flareon deploy
-flareon logs
+flarelet init
+flarelet dev
+flarelet deploy
+flarelet logs
 ```
 
 not:
@@ -924,4 +924,4 @@ Cognito
 DynamoDB provisioning
 ```
 
-That distinction is the reason Flareon exists.
+That distinction is the reason Flarelet exists.
