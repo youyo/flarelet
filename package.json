@@ -1,6 +1,6 @@
 {
   "name": "flarelet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Serverless application platform for AWS: declare what your app needs in YAML, push, and Flarelet handles infrastructure, auth, previews and deployment.",
   "type": "module",
   "license": "MIT",
