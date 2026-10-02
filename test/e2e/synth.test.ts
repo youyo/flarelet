@@ -8,9 +8,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const CLI = resolve(import.meta.dirname, "../../dist/cli/index.js");
 const EXAMPLES = resolve(import.meta.dirname, "../../examples");
 
+// CI（GitHub Actions）の GITHUB_* を引き継ぐと、PR の CI では Git 検出が PR として解決されてしまうため除く。
+const HOST_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !k.startsWith("GITHUB_")),
+);
+
 // Docker / pip / npm を避けるため、既定ではバンドルをスキップする。
 const BASE_ENV = {
-  ...process.env,
+  ...HOST_ENV,
   FLARELET_SKIP_BUNDLING: "1",
   FLARELET_OFFLINE: "1",
   AWS_REGION: "us-east-1",
@@ -328,7 +333,7 @@ describe("real bundling (no skip)", () => {
     await mkdir(join(dir, "app"));
     await writeFile(join(dir, "app", "index.ts"), 'console.log("hello from bundled app");\n');
     const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir, {
-      ...process.env,
+      ...HOST_ENV,
       AWS_REGION: "us-east-1",
     });
     expect(r.code, r.stderr).toBe(0);
