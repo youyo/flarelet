@@ -5,3 +5,5 @@ dist
 mise.local.toml
 .claude/handover/
 .claude/settings.local.json
+.claude/skills/aws-well-architected-review/
+skills-lock.json
