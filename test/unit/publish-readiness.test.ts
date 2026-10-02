@@ -100,7 +100,9 @@ describe("no real AWS account IDs in tracked files", () => {
       if (!st?.isFile() || !existsSync(abs)) continue;
       const buf = readFileSync(abs);
       if (buf.includes(0)) continue; // バイナリ
-      for (const m of buf.toString("utf8").matchAll(/(?<![0-9])[0-9]{12}(?![0-9])/g)) {
+      // Actions を固定するコミット SHA（40 桁 16 進）は 12 桁の数字列を含みうるが、アカウント ID ではない
+      const text = buf.toString("utf8").replace(/@[0-9a-f]{40}\b/g, "@<sha>");
+      for (const m of text.matchAll(/(?<![0-9])[0-9]{12}(?![0-9])/g)) {
         if (!isDummy(m[0])) hits.push(`${f}: ${m[0]}`);
       }
     }

@@ -155,6 +155,42 @@ git: # 省略可。省略時は「デフォルトブランチ → prod/current�
 | `http: { auth: false }`   | **認証なしで公開**（永続 stage のみ。PR プレビューは Preview Auth を強制） |
 | `http: { auth: { ... } }` | 外部 IdP／アクセス制限（[認証](#認証) を参照）                             |
 
+#### スロットリングとアクセスログ（`http.throttle`）
+
+HTTP API には、暴走トラフィックと課金（denial of wallet）を防ぐガードレールとして既定でスロットリングが付きます。永続 stage は `rate: 1000`（req/s）・`burst: 2000`、PR プレビューは `rate: 100`・`burst: 200` です。`flarelet.yaml` で上書き・無効化できます。
+
+```yaml
+http:
+  throttle: { rate: 2000, burst: 4000 } # rate: 正の数（10000 以下）、burst: 正の整数（5000 以下）
+  # throttle: false                    # スロットリングなし（API Gateway のアカウント上限は残る）
+```
+
+1 リクエストは Lambda の同時実行を 2 つ（front + app）消費し、アカウント既定の同時実行は 1000 なので、上げるときはクォータを確認してください。API は 1 行 JSON のアクセスログ（リクエスト ID、送信元 IP、メソッド、ルート、パス、ステータス、レイテンシ。ヘッダ・クエリ文字列・Cookie・トークンは含まない）を version スタック内のロググループ（保持 1 か月、スタックと一緒に削除）へ出力します。
+
+> **既存デプロイへの影響:** 次回の `flarelet deploy` で、永続 stage の S3 バージョニング（非現行バージョンは 30 日で失効）と DynamoDB 削除保護が有効になり、既定のスロットリングが適用されます。`flarelet destroy --stage-resources` は保護付きテーブルも削除できます。
+
+#### CloudWatch アラーム（`alerts`）
+
+アラームは **opt-in** です。`alerts:` を書かなければ、生成されるテンプレートは変わりません。既存の SNS トピックを指定すると、**永続 stage だけ**に次のアラームを作ります（PR プレビューと `flarelet dev` には、`alerts` を書いても作りません）。
+
+```yaml
+alerts:
+  topicArn: arn:aws:sns:ap-northeast-1:123456789012:ops-alerts # デプロイ先と同じリージョンの既存の標準（FIFO ではない）トピック
+```
+
+| アラーム（期間 5 分・評価 1 回。ALARM と OK の両方で通知）                       | 条件     |
+| -------------------------------------------------------------------------------- | -------- |
+| app Lambda と front Lambda（front は認証があるときだけ）: `Errors`               | Sum >= 5 |
+| app Lambda と front Lambda: `Throttles`                                          | Sum >= 1 |
+| HTTP API（`http` があるとき）: `5xx`（`AWS/ApiGateway`、次元 `ApiId` + `Stage`） | Sum >= 5 |
+| DynamoDB テーブルごと: `SystemErrors`（操作ごとの合計）                          | Sum >= 1 |
+| DynamoDB テーブルごと: `ReadThrottleEvents` + `WriteThrottleEvents`              | Sum >= 1 |
+
+- データが無い期間は正常として扱います。しきい値は固定で、`flarelet.yaml` では変えられません
+- Flarelet は **SNS トピックを作りません**（メール確認などの購読と、トピックのライフサイクルをあなたが管理できるようにするためです）。トピックはデプロイ先と同じリージョンに必要で、違うと `synth` / `deploy` がエラーになります
+- トピックをカスタマー管理の KMS キーで暗号化している場合は、キーポリシーで CloudWatch に使用を許可してください（`cloudwatch.amazonaws.com` に `kms:Decrypt` と `kms:GenerateDataKey*`）。既定の `alias/aws/sns` キーは CloudWatch アラームでは使えません
+- アラーム名は `<スタック名>-<対象>` です（例: `flarelet-myapp-prod-v1-app-errors`、`flarelet-myapp-prod-database-main-system-errors`）
+
 ### アプリへの受け渡し
 
 | 宣言              | 環境変数                         |
@@ -344,6 +380,7 @@ PR プレビュー、ブランチのデプロイ、後片付けを GitHub Action
 - `flarelet validate` は、既存ワークフローの `on.push.branches` が `git` 設定と食い違うと警告を出します
 - **ワークフローの手編集は `--force` で失われます。** 独自の処理は別のワークフローファイルに書いてください
 - 同じ PR（ブランチ）の実行は `concurrency` で直列化されます
+- 生成されるワークフローの Actions はコミット SHA で固定されます（checkout は `persist-credentials: false`）。既存の生成済みワークフローは `flarelet workflow generate --force` で再生成すると反映されます
 - フォークからの PR は OIDC / secrets が使えないため対象外です
 
 プレビューは認証（Preview Auth）で保護されています。PR コメントには URL と「`flarelet env url --pr <番号> --with-token` で取得」という案内だけを載せ、トークン付きリンクは載せません（public リポジトリで誰でも開けてしまうため）。private リポジトリに限り、`flarelet github comment --with-token` をワークフローに足せばリンクをコメントに載せられます（public リポジトリでは拒否します）。
@@ -352,7 +389,7 @@ PR プレビュー、ブランチのデプロイ、後片付けを GitHub Action
 
 - CDK bootstrap ロール（`cdk-<qualifier>-{deploy,file-publishing,image-publishing,lookup}-role-*`）の `sts:AssumeRole`、`cfn-exec` ロールの PassRole（CloudFormation 宛のみ）
 - CloudFormation の読み取り（Describe / Get / List）と、PR プレビューのスタック（`flarelet-*-preview-pr-*`）だけの `DeleteStack`（`flarelet-bootstrap-*` は明示 Deny）
-- SSM `/flarelet/*` の読み取り
+- SSM `GetParameter`（CDK bootstrap のバージョン `/cdk-bootstrap/<qualifier>/version` だけ。`/flarelet/*` は読めません）
 - Secrets Manager `DescribeSecret`（`flarelet/*/auth/*` = 外部 IdP の資格情報だけ。deploy が値を読まずに有無を確認するため）
 - Secrets Manager `GetSecretValue`（タグ `flarelet:stage=preview` かつ `flarelet:lifecycle=ephemeral` のシークレット＝PR プレビューのものだけ。永続 stage の Cookie 署名鍵は読めません）
 - CloudWatch Logs の読み取り（`FilterLogEvents` / `GetLogEvents` / `StartLiveTail`。Flarelet のロググループ `flarelet-*` だけ）

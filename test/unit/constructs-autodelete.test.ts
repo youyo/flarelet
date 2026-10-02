@@ -45,7 +45,7 @@ describe("autoDeleteObjects provider logs", () => {
     expect(lg.DeletionPolicy).toBe("Delete");
     expect(lg.Properties.RetentionInDays).toEqual(expect.any(Number));
     expect(Object.values(t.Resources).filter((r) => r.Type === "AWS::Logs::LogGroup")).toHaveLength(
-      3,
+      4, // app / front / API アクセスログ / autoDelete プロバイダ
     );
   });
 

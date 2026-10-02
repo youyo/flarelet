@@ -22,7 +22,7 @@ import {
   DescribeUserPoolCommand,
   ListUsersCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { DeleteTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DeleteTableCommand, DynamoDBClient, UpdateTableCommand } from "@aws-sdk/client-dynamodb";
 import {
   IAMClient,
   ListOpenIDConnectProvidersCommand,
@@ -262,6 +262,16 @@ export function awsCloud(region: string): Cloud {
     async deleteRetained(r) {
       switch (r.type) {
         case "AWS::DynamoDB::Table":
+          // 永続 stage のテーブルは削除保護付き。先に外さないと DeleteTable が失敗する
+          try {
+            await ddb.send(
+              new UpdateTableCommand({ TableName: r.physicalId, DeletionProtectionEnabled: false }),
+            );
+          } catch (e) {
+            // 無い/削除中、または既に保護なし（ValidationException）は DeleteTable に進む。
+            // 本当の失敗は DeleteTable 側で表面化する
+            ignore("ResourceNotFoundException", "ResourceInUseException", "ValidationException")(e);
+          }
           await ddb
             .send(new DeleteTableCommand({ TableName: r.physicalId }))
             // 削除中（ResourceInUseException）も削除済みとみなす

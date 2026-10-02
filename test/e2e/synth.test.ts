@@ -269,6 +269,56 @@ describe("flarelet init -> synth (typescript)", () => {
   });
 });
 
+describe("alerts (opt-in CloudWatch alarms)", () => {
+  const TOPIC = "arn:aws:sns:us-east-1:123456789012:ops-alerts";
+  const alarmNames = (t: Template) =>
+    Object.values(t.Resources)
+      .filter((r) => r.Type === "AWS::CloudWatch::Alarm")
+      .map((r) => (r.Properties as unknown as { AlarmName: string }).AlarmName)
+      .sort();
+  const names = async (args: string[]) => {
+    const r = await run(["synth", ...args], dir);
+    expect(r.code, r.stderr).toBe(0);
+    const meta = JSON.parse(await readFile(join(dir, ".flarelet", "metadata.json"), "utf8"));
+    const out: string[] = [];
+    for (const s of meta.stacks as { name: string }[]) {
+      out.push(...alarmNames(await readTemplate(dir, s.name)));
+    }
+    return out;
+  };
+
+  beforeEach(async () => {
+    const r = await run(["init", "--runtime", "typescript", dir], tmpdir());
+    expect(r.code).toBe(0);
+  });
+
+  it("creates no alarms without alerts", async () => {
+    expect(await names(["--stage", "prod", "--version", "v1"])).toEqual([]);
+  });
+
+  it("creates alarms for a persistent stage only", async () => {
+    const file = join(dir, "flarelet.yaml");
+    await writeFile(file, `${await readFile(file, "utf8")}\nalerts:\n  topicArn: ${TOPIC}\n`);
+    const prod = await names(["--stage", "prod", "--version", "v1"]);
+    expect(prod.length).toBeGreaterThan(0);
+    for (const n of prod) expect(n).toMatch(/^flarelet-.+-prod(-v1)?-/);
+    expect(prod.some((n) => n.endsWith("-api-5xx"))).toBe(true);
+    expect(prod.some((n) => n.includes("-database-") && n.endsWith("-system-errors"))).toBe(true);
+    expect(await names(["--pr", "12"])).toEqual([]);
+  });
+
+  it("fails when the topic region differs from the deploy region", async () => {
+    const file = join(dir, "flarelet.yaml");
+    await writeFile(file, `${await readFile(file, "utf8")}\nalerts:\n  topicArn: ${TOPIC}\n`);
+    const r = await run(["synth", "--stage", "prod", "--version", "v1"], dir, {
+      ...BASE_ENV,
+      AWS_REGION: "eu-west-1",
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toMatch(/alerts\.topicArn/);
+  });
+});
+
 describe("real bundling (no skip)", () => {
   it("bundles a dependency-free typescript app and the front auth Lambda with esbuild", async () => {
     await writeFile(

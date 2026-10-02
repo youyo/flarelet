@@ -84,13 +84,15 @@ export function workflowTemplate({ runtime, branches, version }: WorkflowOptions
         run: npm install --no-audit --no-fund
 `
       : "";
-  const awsSteps = `      - uses: actions/checkout@v7
+  const awsSteps = `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
 ${install}
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: \${{ vars.FLARELET_AWS_ROLE_ARN }}
           aws-region: \${{ vars.FLARELET_AWS_REGION }}

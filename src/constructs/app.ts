@@ -20,10 +20,11 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 import { join } from "node:path";
 import type { Construct } from "constructs";
 import { idpSecretNames } from "../config/names.js";
-import { effectiveAuth, type FlareletIR } from "../ir/index.js";
+import { effectiveAuth, type FlareletIR, type HttpIR } from "../ir/index.js";
 import type { Deployment } from "../resolver/index.js";
 import { bindingEnvName } from "../runtime/env.js";
 import { resolveModel, type ResolvedModel } from "./ai-models.js";
+import { AlarmSet } from "./alarms.js";
 import { Data, removalOf, type Lifetime } from "./data.js";
 import { LAUNCHER_HANDLER } from "./launcher.js";
 import {
@@ -89,6 +90,60 @@ function functionRole(scope: Construct, id: string, logGroup: logs.LogGroup): ia
     }),
   );
   return role;
+}
+
+/** スロットリングの既定値（永続 stage / PR preview）。yaml の http.throttle で上書き・無効化できる。 */
+export const DEFAULT_THROTTLE = {
+  persistent: { rate: 1000, burst: 2000 },
+  ephemeral: { rate: 100, burst: 200 },
+} as const;
+
+/**
+ * アクセスログ（1 行 JSON）。PII・トークン流出を避けるため、ヘッダ・クエリ・Cookie・authorizer/claims は含めない。
+ * `$context.path` はパスのみ（クエリ文字列を含まない）。
+ */
+const ACCESS_LOG_FORMAT = JSON.stringify({
+  requestId: "$context.requestId",
+  ip: "$context.identity.sourceIp",
+  requestTime: "$context.requestTime",
+  httpMethod: "$context.httpMethod",
+  routeKey: "$context.routeKey",
+  path: "$context.path",
+  status: "$context.status",
+  protocol: "$context.protocol",
+  responseLength: "$context.responseLength",
+  responseLatency: "$context.responseLatency",
+  integrationLatency: "$context.integrationLatency",
+  integrationErrorMessage: "$context.integrationErrorMessage",
+});
+
+/** default stage にアクセスログとスロットリングを設定する。 */
+function configureApiStage(
+  scope: Construct,
+  api: apigwv2.HttpApi,
+  http: HttpIR,
+  ephemeral: boolean,
+): void {
+  const stage = api.defaultStage?.node.defaultChild as apigwv2.CfnStage;
+  const accessLogs = functionLogGroup(scope, "ApiAccessLogs");
+  stage.accessLogSettings = {
+    destinationArn: accessLogs.logGroupArn,
+    format: ACCESS_LOG_FORMAT,
+  };
+  const t =
+    http.throttle === "default"
+      ? ephemeral
+        ? DEFAULT_THROTTLE.ephemeral
+        : DEFAULT_THROTTLE.persistent
+      : http.throttle === "off"
+        ? undefined
+        : http.throttle;
+  if (t) {
+    stage.defaultRouteSettings = {
+      throttlingRateLimit: t.rate,
+      throttlingBurstLimit: t.burst,
+    };
+  }
 }
 
 /** CloudFormation のタグ値に使えない文字を `-` にする。 */
@@ -214,6 +269,11 @@ export class StageStack extends Stack {
   constructor(scope: Construct, id: string, props: StageStackProps) {
     super(scope, id, props);
     this.data = new Data(this, "Data", { ir: props.ir, lifetime: "retain" });
+    if (props.ir.alerts) {
+      // stage スタックは永続 stage にしか作られない
+      const alarms = new AlarmSet(this, props.ir.alerts.topicArn, this.stackName);
+      for (const [name, table] of Object.entries(this.data.tables)) alarms.table(name, table);
+    }
     if (props.ir.http?.auth.enabled) {
       const prefix = domainPrefix(props.ir.name, props.deployment.stage, props.account);
       const userPool = new cognito.UserPool(this, "UserPool", {
@@ -316,6 +376,10 @@ export class VersionStack extends Stack {
     }
     for (const m of models) environment[bindingEnvName("AI", m.name, "MODEL_ID")] = m.profileId;
 
+    // opt-in。永続 stage だけ（PR preview は短命なので通知先を汚さない。dev は別スタック）
+    const alarms =
+      ir.alerts && !ephemeral ? new AlarmSet(this, ir.alerts.topicArn, this.stackName) : undefined;
+
     const appLogs = functionLogGroup(this, "AppLogs");
     const appFn = new lambda.Function(this, "AppFunction", {
       logGroup: appLogs,
@@ -333,6 +397,7 @@ export class VersionStack extends Stack {
       environment,
     });
 
+    alarms?.lambda("AlarmApp", "app", appFn);
     new CfnOutput(this, "AppFunctionName", { value: appFn.functionName });
     new CfnOutput(this, "AppLogGroup", { value: appLogs.logGroupName });
 
@@ -371,6 +436,8 @@ export class VersionStack extends Stack {
 
     // --- HTTP API。Api → Client → front Lambda env の順で非循環に組む ---
     const api = new apigwv2.HttpApi(this, "Api", { description: `Flarelet ${ir.name}` });
+    configureApiStage(this, api, ir.http, ephemeral);
+    alarms?.httpApi(api);
     let integrationTarget: lambda.IFunction = appFn;
 
     if (front) {
@@ -447,6 +514,8 @@ export class VersionStack extends Stack {
       const frontLogs = functionLogGroup(this, "FrontLogs");
       const frontFn = new lambda.Function(this, "FrontAuthFunction", {
         logGroup: frontLogs,
+        // front のみ JSON ログ（app は LWA 経由のユーザーアプリ stdout をそのまま見せるため対象外）
+        loggingFormat: lambda.LoggingFormat.JSON,
         role: functionRole(this, "FrontRole", frontLogs),
         runtime: lambda.Runtime.NODEJS_24_X,
         architecture: lambda.Architecture.ARM_64,
@@ -465,6 +534,7 @@ export class VersionStack extends Stack {
           resources: [`arn:aws:ssm:${this.region}:${Aws.ACCOUNT_ID}:parameter${epochParam}`],
         }),
       );
+      alarms?.lambda("AlarmFront", "front", frontFn);
       integrationTarget = frontFn;
 
       new CfnOutput(this, "FrontLogGroup", { value: frontLogs.logGroupName });

@@ -73,6 +73,60 @@ describe("parseConfig: valid", () => {
   });
 });
 
+describe("parseConfig: http.throttle", () => {
+  const y = (t: string) =>
+    `version: 1\nname: myapp\nruntime: { language: python }\nhttp:\n  throttle: ${t}\n`;
+  it.each(["false", "{ rate: 50, burst: 100 }", "{ rate: 0.5, burst: 1 }"])("accepts %s", (t) => {
+    expect(() => ok(y(t))).not.toThrow();
+  });
+  it.each([
+    ["true", "http.throttle"],
+    ["{ rate: 0, burst: 10 }", "http.throttle.rate"],
+    ["{ rate: -1, burst: 10 }", "http.throttle.rate"],
+    ["{ rate: 10, burst: 1.5 }", "http.throttle.burst"],
+    ["{ rate: 10, burst: 0 }", "http.throttle.burst"],
+    ["{ rate: 10001, burst: 10 }", "http.throttle.rate"],
+    ["{ rate: 10, burst: 5001 }", "http.throttle.burst"],
+    ["{ rate: 10 }", "http.throttle.burst"],
+    ["{ rate: 10, burst: 10, x: 1 }", "http.throttle"],
+  ])("rejects %s", (t, path) => {
+    expect(fail(y(t)).map((i) => i.path)).toContain(path);
+  });
+});
+
+describe("parseConfig: alerts", () => {
+  const y = (a: string) => `version: 1\nname: myapp\nruntime: { language: python }\nalerts:\n${a}`;
+  const ARN = "arn:aws:sns:ap-northeast-1:123456789012:ops-alerts";
+  it("accepts a topicArn", () => {
+    expect(ok(y(`  topicArn: ${ARN}\n`)).alerts).toEqual({ topicArn: ARN });
+  });
+  it("accepts underscores and hyphens in the topic name", () => {
+    expect(() => ok(y("  topicArn: arn:aws:sns:us-east-1:123456789012:a_b-c\n"))).not.toThrow();
+  });
+  it.each([
+    ["not an arn", "  topicArn: ops-alerts\n", "alerts.topicArn"],
+    ["wrong service", "  topicArn: arn:aws:sqs:ap-northeast-1:123456789012:q\n", "alerts.topicArn"],
+    ["bad account", "  topicArn: arn:aws:sns:ap-northeast-1:1234:t\n", "alerts.topicArn"],
+    [
+      "fifo topic",
+      "  topicArn: arn:aws:sns:ap-northeast-1:123456789012:t.fifo\n",
+      "alerts.topicArn",
+    ],
+    ["missing region", "  topicArn: arn:aws:sns::123456789012:t\n", "alerts.topicArn"],
+    ["missing topicArn", "  {}\n", "alerts.topicArn"],
+    ["unknown key", `  topicArn: ${ARN}\n  threshold: 5\n`, "alerts"],
+  ])("rejects %s", (_n, body, path) => {
+    expect(fail(y(body)).map((i) => i.path)).toContain(path);
+  });
+  it("rejects a non-object alerts", () => {
+    expect(
+      fail("version: 1\nname: myapp\nruntime: { language: python }\nalerts: true\n").map(
+        (i) => i.path,
+      ),
+    ).toContain("alerts");
+  });
+});
+
 describe("parseConfig: errors carry paths", () => {
   it("reports invalid YAML syntax", () => {
     const issues = fail("version: 1\nname: [unclosed\n");

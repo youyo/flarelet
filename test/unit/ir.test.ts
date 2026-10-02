@@ -24,11 +24,31 @@ describe("toIR", () => {
   it("http: true is authenticated by default", () => {
     expect(ir(base + "http: true\n").http).toEqual({
       auth: { enabled: true, provider: "cognito" },
+      throttle: "default",
     });
   });
 
   it("http: {} and auth omitted are authenticated", () => {
-    expect(ir(base + "http: {}\n").http).toEqual({ auth: { enabled: true, provider: "cognito" } });
+    expect(ir(base + "http: {}\n").http).toEqual({
+      auth: { enabled: true, provider: "cognito" },
+      throttle: "default",
+    });
+  });
+
+  it("http.throttle: unspecified -> default, false -> off, object -> as is", () => {
+    expect(ir(base + "http: true\n").http?.throttle).toBe("default");
+    expect(ir(base + "http: { auth: false }\n").http?.throttle).toBe("default");
+    expect(ir(base + "http: { throttle: false }\n").http?.throttle).toBe("off");
+    expect(ir(base + "http: { throttle: { rate: 5, burst: 9 } }\n").http?.throttle).toEqual({
+      rate: 5,
+      burst: 9,
+    });
+  });
+
+  it("alerts: unspecified -> null, specified -> topicArn", () => {
+    expect(ir(base).alerts).toBeNull();
+    const arn = "arn:aws:sns:ap-northeast-1:123456789012:ops";
+    expect(ir(base + `alerts: { topicArn: ${arn} }\n`).alerts).toEqual({ topicArn: arn });
   });
 
   it("http: false -> no http", () => {
@@ -36,7 +56,10 @@ describe("toIR", () => {
   });
 
   it("auth: false is the only public form", () => {
-    expect(ir(base + "http: { auth: false }\n").http).toEqual({ auth: { enabled: false } });
+    expect(ir(base + "http: { auth: false }\n").http).toEqual({
+      auth: { enabled: false },
+      throttle: "default",
+    });
   });
 
   it("auth: true and provider forms", () => {

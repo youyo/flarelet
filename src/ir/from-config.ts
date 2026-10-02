@@ -40,8 +40,12 @@ function toAuth(
 
 function toHttp(http: FlareletConfig["http"]): HttpIR | null {
   if (http === undefined || http === false) return null;
-  if (http === true) return { auth: toAuth(undefined) };
-  return { auth: toAuth(http.auth) };
+  if (http === true) return { auth: toAuth(undefined), throttle: "default" };
+  const t = http.throttle;
+  return {
+    auth: toAuth(http.auth),
+    throttle: t === undefined ? "default" : t === false ? "off" : { rate: t.rate, burst: t.burst },
+  };
 }
 
 const names = (r: Record<string, unknown> | undefined) =>
@@ -70,5 +74,6 @@ export function toIR(c: FlareletConfig): FlareletIR {
       preview: c.git?.preview ? { branch: c.git.preview.branch } : null,
       pullRequests: c.git?.pullRequests ?? true,
     },
+    alerts: c.alerts ? { topicArn: c.alerts.topicArn } : null,
   };
 }
