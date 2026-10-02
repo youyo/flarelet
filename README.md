@@ -27,6 +27,84 @@ flarelet logs
 
 For the design, see [docs/specs/FLARELET_V0_DESIGN.md](docs/specs/FLARELET_V0_DESIGN.md). For implementation decisions, see [docs/specs/DECISIONS.md](docs/specs/DECISIONS.md).
 
+## Architecture
+
+Request flow at runtime (a dotted line marks an optional or opt-in path):
+
+```mermaid
+flowchart LR
+  client["Browser / client"] --> api
+  subgraph aws["Your AWS account"]
+    api["API Gateway HTTP API<br/>$default route, throttling, access logs"]
+    front["front auth Lambda<br/>(auth enabled)"]
+    app["app Lambda<br/>Lambda Web Adapter + your app"]
+    cognito["Cognito User Pool<br/>Managed Login, PKCE"]
+    secret["Secrets Manager<br/>cookie signing key"]
+    epoch["SSM Parameter Store<br/>session epoch"]
+    ddb[("DynamoDB")]
+    s3[("S3")]
+    bedrock["Amazon Bedrock"]
+    ssm["SSM SecureString<br/>secrets, loaded as env vars at start"]
+    logs["CloudWatch Logs<br/>app, front, API access logs"]
+    alarm["CloudWatch alarms<br/>Lambda, HTTP API, DynamoDB metrics"]
+  end
+  idp["External IdP<br/>Google / Entra ID / OIDC"]
+  sns["Your SNS topic"]
+
+  api -->|"auth enabled"| front
+  api -.->|"auth: false"| app
+  front -->|"invoke"| app
+  front <--> cognito
+  cognito <-.->|"optional"| idp
+  front --> secret
+  front --> epoch
+  app --> ddb
+  app --> s3
+  app --> bedrock
+  app --> ssm
+  api --> logs
+  front --> logs
+  app --> logs
+  alarm -.->|"opt-in: alerts"| sns
+```
+
+- Requests enter through one API Gateway HTTP API (`$default` route). With `auth` enabled, the front auth Lambda signs users in through Cognito (Managed Login, PKCE; an external IdP is optional) and then invokes the app Lambda. With `auth: false`, the API calls the app Lambda directly
+- The front auth Lambda reads only the cookie signing key (Secrets Manager) and the session epoch (SSM Parameter Store)
+- The app Lambda runs your app with the Lambda Web Adapter, and reaches only the DynamoDB tables, S3 buckets, Bedrock models and secrets you declared
+- CloudWatch alarms and the SNS notification exist only when you set `alerts`
+
+Stacks and deployment:
+
+```mermaid
+flowchart TB
+  dev["Developer machine<br/>flarelet CLI"]
+  gha["GitHub Actions"]
+  ci["CI role"]
+  boot["CDK bootstrap roles"]
+  cfn["CloudFormation"]
+  dev --> boot
+  gha -->|"OIDC"| ci
+  ci -->|"assume"| boot
+  boot --> cfn
+
+  subgraph persistent["Persistent stage, e.g. prod"]
+    direction LR
+    stage["stage stack<br/>flarelet-{app}-{stage}<br/>RETAIN<br/>Cognito User Pool, DynamoDB, S3,<br/>cookie signing key, session epoch<br/>S3 versioning, DynamoDB deletion protection"]
+    version["version stack<br/>flarelet-{app}-{stage}-{version}<br/>recreated per version<br/>HTTP API, Lambdas, App Client, log groups"]
+    version -->|"uses"| stage
+  end
+  subgraph preview["PR preview"]
+    pr["single stack<br/>flarelet-{app}-preview-pr-{N}<br/>destroyed when the PR is closed"]
+  end
+  cfn --> stage
+  cfn --> version
+  cfn --> pr
+```
+
+- A persistent stage is split in two. The stage stack holds the data and auth state (RETAIN). The version stack holds the HTTP API and Lambdas and is created anew per version
+- A PR preview is a single stack that is destroyed when the PR closes. It has no Cognito User Pool
+- Both the flarelet CLI and GitHub Actions (OIDC, no long-lived keys) deploy through the CDK bootstrap roles and CloudFormation
+
 ## Requirements
 
 - Node.js 24

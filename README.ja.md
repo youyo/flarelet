@@ -27,6 +27,84 @@ flarelet logs
 
 設計は [docs/specs/FLARELET_V0_DESIGN.md](docs/specs/FLARELET_V0_DESIGN.md)、実装上の決定事項は [docs/specs/DECISIONS.md](docs/specs/DECISIONS.md) を参照してください。
 
+## アーキテクチャ
+
+実行時のリクエストの流れです（点線は任意または opt-in の経路）。
+
+```mermaid
+flowchart LR
+  client["Browser / client"] --> api
+  subgraph aws["Your AWS account"]
+    api["API Gateway HTTP API<br/>$default route, throttling, access logs"]
+    front["front auth Lambda<br/>(auth enabled)"]
+    app["app Lambda<br/>Lambda Web Adapter + your app"]
+    cognito["Cognito User Pool<br/>Managed Login, PKCE"]
+    secret["Secrets Manager<br/>cookie signing key"]
+    epoch["SSM Parameter Store<br/>session epoch"]
+    ddb[("DynamoDB")]
+    s3[("S3")]
+    bedrock["Amazon Bedrock"]
+    ssm["SSM SecureString<br/>secrets, loaded as env vars at start"]
+    logs["CloudWatch Logs<br/>app, front, API access logs"]
+    alarm["CloudWatch alarms<br/>Lambda, HTTP API, DynamoDB metrics"]
+  end
+  idp["External IdP<br/>Google / Entra ID / OIDC"]
+  sns["Your SNS topic"]
+
+  api -->|"auth enabled"| front
+  api -.->|"auth: false"| app
+  front -->|"invoke"| app
+  front <--> cognito
+  cognito <-.->|"optional"| idp
+  front --> secret
+  front --> epoch
+  app --> ddb
+  app --> s3
+  app --> bedrock
+  app --> ssm
+  api --> logs
+  front --> logs
+  app --> logs
+  alarm -.->|"opt-in: alerts"| sns
+```
+
+- リクエストは API Gateway HTTP API（`$default` ルート）1 つから入ります。`auth` が有効なら、front auth Lambda が Cognito（Managed Login、PKCE。外部 IdP は任意）でサインインさせたうえで app Lambda を呼び出します。`auth: false` なら API が app Lambda を直接呼びます
+- front auth Lambda が読むのは Cookie 署名鍵（Secrets Manager）とセッション世代（SSM Parameter Store）だけです
+- app Lambda は Lambda Web Adapter でアプリを動かし、宣言した DynamoDB・S3・Bedrock モデル・secrets にだけアクセスできます
+- CloudWatch アラームと SNS への通知は、`alerts` を指定したときだけ作られます
+
+スタック構成とデプロイです。
+
+```mermaid
+flowchart TB
+  dev["Developer machine<br/>flarelet CLI"]
+  gha["GitHub Actions"]
+  ci["CI role"]
+  boot["CDK bootstrap roles"]
+  cfn["CloudFormation"]
+  dev --> boot
+  gha -->|"OIDC"| ci
+  ci -->|"assume"| boot
+  boot --> cfn
+
+  subgraph persistent["Persistent stage, e.g. prod"]
+    direction LR
+    stage["stage stack<br/>flarelet-{app}-{stage}<br/>RETAIN<br/>Cognito User Pool, DynamoDB, S3,<br/>cookie signing key, session epoch<br/>S3 versioning, DynamoDB deletion protection"]
+    version["version stack<br/>flarelet-{app}-{stage}-{version}<br/>recreated per version<br/>HTTP API, Lambdas, App Client, log groups"]
+    version -->|"uses"| stage
+  end
+  subgraph preview["PR preview"]
+    pr["single stack<br/>flarelet-{app}-preview-pr-{N}<br/>destroyed when the PR is closed"]
+  end
+  cfn --> stage
+  cfn --> version
+  cfn --> pr
+```
+
+- 永続 stage は 2 つに分かれます。stage スタックがデータと認証の状態を持ち（RETAIN）、version スタックが HTTP API と Lambda を持ち、version ごとに作り直します
+- PR preview は 1 スタックにまとまり、PR を閉じると destroy されます。Cognito User Pool は作りません
+- flarelet CLI も GitHub Actions（OIDC。長期キーなし）も、CDK bootstrap ロールと CloudFormation 経由でデプロイします
+
 ## 要件
 
 - Node.js 24

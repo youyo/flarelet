@@ -44,6 +44,17 @@ describe("README", () => {
     expect(fences(read(JA))).toBe(fences(read(EN)));
   });
 
+  it("both have an Architecture section with at least two mermaid diagrams", () => {
+    for (const [file, title] of [
+      [EN, "## Architecture"],
+      [JA, "## アーキテクチャ"],
+    ] as const) {
+      const md = read(file);
+      expect(headings(md, "## "), file).toContain(title);
+      expect((md.match(/^```mermaid$/gm) ?? []).length, file).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it("every `flarelet <cmd>` mentioned exists in the CLI", () => {
     const program = createProgram();
     for (const file of [EN, JA]) {
