@@ -118,6 +118,19 @@ describe("synthGithubBootstrap", () => {
     );
   });
 
+  it("only reads the CDK bootstrap version from SSM (no /flarelet/* parameters)", async () => {
+    const { tpl } = await synth(false);
+    const t = await tpl("flarelet-bootstrap-github-youyo-flarelet");
+    const [policy] = byType(t, "AWS::IAM::Policy");
+    const stmts: any[] = policy.Properties.PolicyDocument.Statement;
+    const ssmStmts = stmts.filter((s) =>
+      (Array.isArray(s.Action) ? s.Action : [s.Action]).some((a: string) => a.startsWith("ssm:")),
+    );
+    const resources = JSON.stringify(ssmStmts.map((s) => s.Resource));
+    expect(resources).not.toContain("parameter/flarelet");
+    expect(resources).toContain("parameter/cdk-bootstrap/hnb659fds/version");
+  });
+
   it("grants least-privilege permissions", async () => {
     const { tpl } = await synth(false);
     const t = await tpl("flarelet-bootstrap-github-youyo-flarelet");
@@ -132,7 +145,7 @@ describe("synthGithubBootstrap", () => {
         "sts:AssumeRole",
         "cloudformation:DescribeStacks",
         "cloudformation:DeleteStack",
-        "ssm:GetParametersByPath",
+        "ssm:GetParameter",
         "secretsmanager:GetSecretValue",
         "logs:FilterLogEvents",
         "logs:StartLiveTail",
@@ -140,6 +153,8 @@ describe("synthGithubBootstrap", () => {
       ]),
     );
     expect(actions).not.toContain("ssm:PutParameter");
+    // CI 経路は /flarelet/* の SSM を読まない（secrets は app Lambda が実行時に、session epoch は CFN が扱う）
+    expect(actions).not.toContain("ssm:GetParametersByPath");
     expect(actions).not.toContain("secretsmanager:DeleteSecret");
     const assume = allows.find((s) => s.Action === "sts:AssumeRole");
     expect(JSON.stringify(assume.Resource)).toContain(

@@ -15,6 +15,7 @@
 | `ai`       | 任意 | Bedrock のモデル                                                                           |
 | `secrets`  | 任意 | シークレット名（環境変数名）の配列                                                         |
 | `git`      | 任意 | ブランチと PR の対応付け                                                                   |
+| `alerts`   | 任意 | CloudWatch アラーム（opt-in。永続 stage のみ。下記）                                       |
 
 ## runtime
 
@@ -35,8 +36,30 @@ runtime:
 | `http: { auth: true }`    | `http: true` と同じ                                                        |
 | `http: { auth: false }`   | **認証なしで公開**（永続 stage のみ。PR プレビューは Preview Auth を強制） |
 | `http: { auth: { ... } }` | 外部 IdP／アクセス制限（下記）                                             |
+| `http: { throttle: ... }` | スロットリングの上書き（下記）                                             |
 
-`http` はオブジェクトのとき `auth` キーだけを持てます。
+`http` はオブジェクトのとき `auth` と `throttle` のキーを持てます。
+
+### http.throttle
+
+既定で有効（永続 stage は `rate: 1000` / `burst: 2000`、PR プレビューは `rate: 100` / `burst: 200`）。上書きは `http: { throttle: { rate: <正の数, 10000 以下>, burst: <正の整数, 5000 以下> } }`、無効化は `http: { throttle: false }`。1 リクエストが Lambda 同時実行を 2 つ（front + app）消費するため、上げるときはアカウントのクォータ（既定 1000）を確認する。
+
+### alerts
+
+opt-in。省略するとアラームは作られず、テンプレートも変わらない。`alerts: { topicArn: "arn:aws:sns:<region>:<account>:<name>" }`（`topicArn` は必須、標準 SNS トピックの ARN。未知のキーはエラー）。
+
+```yaml
+alerts:
+  topicArn: arn:aws:sns:ap-northeast-1:123456789012:ops-alerts
+```
+
+- **永続 stage だけ**に作る。PR プレビューと `flarelet dev` には、設定があっても作らない
+- Flarelet は SNS トピックを作らない。既存のトピックを使う。デプロイ先と同じリージョンが必須（違うと synth がエラー）
+- 作られるアラーム（期間 5 分、ALARM と OK で通知、データ無しは正常扱い。しきい値は固定で yaml からは変えられない）
+  - app Lambda と front Lambda（front は認証があるときだけ）: `Errors`（Sum >= 5）、`Throttles`（Sum >= 1）
+  - HTTP API（`http` があるとき）: `5xx`（Sum >= 5。`AWS/ApiGateway`、次元 `ApiId` + `Stage`）
+  - DynamoDB テーブルごと: `SystemErrors`（Sum >= 1）、`ReadThrottleEvents` + `WriteThrottleEvents`（Sum >= 1）
+- トピックをカスタマー管理の KMS キーで暗号化している場合は、キーポリシーで `cloudwatch.amazonaws.com` に `kms:Decrypt` と `kms:GenerateDataKey*` を許可する。既定の `alias/aws/sns` は CloudWatch アラームでは使えない
 
 ### http.auth（オブジェクト形式）
 

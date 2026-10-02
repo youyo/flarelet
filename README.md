@@ -155,6 +155,42 @@ git: # optional. default: default branch -> prod/current, PR -> preview/pr-N
 | `http: { auth: false }`   | **Public, no authentication** (persistent stages only; PR previews still force Preview Auth) |
 | `http: { auth: { ... } }` | External IdP and/or access restriction (see [Authentication](#authentication))               |
 
+#### Throttling and access logs (`http.throttle`)
+
+The HTTP API has a throttle by default, as a guardrail against runaway traffic and cost (denial of wallet). Persistent stages allow `rate: 1000` req/s with `burst: 2000`; PR previews allow `rate: 100` with `burst: 200`. Override or disable it in `flarelet.yaml`:
+
+```yaml
+http:
+  throttle: { rate: 2000, burst: 4000 } # rate: positive number (<= 10000), burst: positive integer (<= 5000)
+  # throttle: false                    # no throttling (API Gateway account limits still apply)
+```
+
+Each request also consumes Lambda concurrency twice (front + app), and the account default is 1000 concurrent executions, so raise the numbers only after checking your quotas. The API also writes a one-line JSON access log (request ID, source IP, method, route, path, status, latencies; no headers, query strings, cookies or tokens) to a log group in the version stack (retention 1 month, deleted with the stack).
+
+> **Upgrading an existing deployment:** the next `flarelet deploy` turns on S3 versioning (noncurrent versions expire after 30 days) and DynamoDB deletion protection for persistent stages, and applies the default throttle. `flarelet destroy --stage-resources` still removes protected tables.
+
+#### CloudWatch alarms (`alerts`)
+
+Alarms are **opt-in**. Without `alerts:` the generated templates are unchanged. Set an existing SNS topic and Flarelet creates the alarms below for **persistent stages only** (PR previews and `flarelet dev` never get alarms, even when `alerts` is set):
+
+```yaml
+alerts:
+  topicArn: arn:aws:sns:ap-northeast-1:123456789012:ops-alerts # an existing standard (non-FIFO) topic in the deploy region
+```
+
+| Alarm (5-minute period, 1 evaluation period; notifies on ALARM and OK)                | Condition |
+| ------------------------------------------------------------------------------------- | --------- |
+| app Lambda and front Lambda (front only when auth is on): `Errors`                    | Sum >= 5  |
+| app Lambda and front Lambda: `Throttles`                                              | Sum >= 1  |
+| HTTP API (when `http` is set): `5xx` (`AWS/ApiGateway`, dimensions `ApiId` + `Stage`) | Sum >= 5  |
+| each DynamoDB table: `SystemErrors` (summed over operations)                          | Sum >= 1  |
+| each DynamoDB table: `ReadThrottleEvents` + `WriteThrottleEvents`                     | Sum >= 1  |
+
+- Missing data is treated as not breaching. The thresholds are fixed and cannot be changed in `flarelet.yaml`
+- Flarelet **does not create the SNS topic** (so you control subscriptions, such as email confirmation, and the topic lifecycle). The topic must be in the same region as the deployment, otherwise `synth` / `deploy` fails
+- If the topic is encrypted with a customer managed KMS key, the key policy must allow CloudWatch to use it (`cloudwatch.amazonaws.com` needs `kms:Decrypt` and `kms:GenerateDataKey*`); the default `alias/aws/sns` key cannot be used with CloudWatch alarms
+- Alarm names are `<stack name>-<target>`, for example `flarelet-myapp-prod-v1-app-errors` and `flarelet-myapp-prod-database-main-system-errors`
+
 ### Passing values to the app
 
 | Declaration       | Environment variable             |
@@ -344,6 +380,7 @@ PR previews, branch deploys and cleanup run from GitHub Actions with OIDC.
 - `flarelet validate` prints a warning when the existing workflow's `on.push.branches` differs from the `git` settings
 - **Manual edits to the workflow are lost with `--force`.** Keep custom changes in a separate workflow file
 - Runs for the same PR (branch) are serialized with `concurrency`
+- Actions in the generated workflow are pinned to commit SHAs (with `persist-credentials: false` on checkout). To bring an existing generated workflow up to date, regenerate it with `flarelet workflow generate --force`
 - PRs from forks are not handled, because OIDC and secrets are unavailable to them
 
 Previews are protected by Preview Auth. The PR comment contains only the URL and a hint to get a token link with `flarelet env url --pr <number> --with-token`, not the link itself (on a public repository anyone could open it). For private repositories only, adding `flarelet github comment --with-token` to the workflow puts the link in the comment (it is refused on public repositories).
@@ -352,7 +389,7 @@ Previews are protected by Preview Auth. The PR comment contains only the URL and
 
 - `sts:AssumeRole` on the CDK bootstrap roles (`cdk-<qualifier>-{deploy,file-publishing,image-publishing,lookup}-role-*`), and PassRole of the `cfn-exec` role (to CloudFormation only)
 - CloudFormation read access (Describe / Get / List), and `DeleteStack` only for PR preview stacks (`flarelet-*-preview-pr-*`; `flarelet-bootstrap-*` is explicitly denied)
-- Read access to SSM `/flarelet/*`
+- SSM `GetParameter` only on the CDK bootstrap version (`/cdk-bootstrap/<qualifier>/version`; no `/flarelet/*` parameters)
 - Secrets Manager `DescribeSecret` (only `flarelet/*/auth/*`, the external IdP credentials; deploy uses it to check presence without reading values)
 - Secrets Manager `GetSecretValue` (only secrets tagged `flarelet:stage=preview` and `flarelet:lifecycle=ephemeral`, which are PR previews'. The cookie signing key of a persistent stage cannot be read)
 - CloudWatch Logs read access (`FilterLogEvents` / `GetLogEvents` / `StartLiveTail`, only on Flarelet's log groups `flarelet-*`)

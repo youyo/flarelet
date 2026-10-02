@@ -191,7 +191,31 @@
 
 ### CI ロール（bootstrap github）
 - `secretsmanager:DescribeSecret` を `arn:aws:secretsmanager:{region}:{account}:secret:flarelet/*/auth/*` に追加（外部 IdP の stage を CI から deploy するときの資格情報チェック）。値（`GetSecretValue`）は従来どおり PR preview のシークレットだけ。実 AWS E2E のポリシーシミュレーションで許可／拒否を確認する
+- SSM は `ssm:GetParameter` を `/cdk-bootstrap/{qualifier}/version` だけに限定し、`/flarelet/*` の読み取りを外した（Well-Architected H-3）。CI 経路（`deploy --ci` / `destroy --ci` / `logs` / `env` / `github`）が `/flarelet/*` を読む箇所は無い: secrets はアプリ Lambda が実行時に読み、session epoch は CloudFormation（cfn-exec）が作成し、テンプレートに SSM 動的参照・valueFromLookup は無い。`list/put/deleteParameter` は手元認証情報の `secret` / `destroy --stage-resources` のみ
 
+
+### GitHub Actions の SHA 固定（Well-Architected M-5）
+- `.github/workflows/*.yml` と生成 workflow（`src/cli/workflow.ts`）の `uses:` は `owner/repo@<40桁コミット SHA> # vX`（タグはコメントで残す）。`actions/checkout` は `persist-credentials: false`（後続ステップは git 資格情報を使わない。GitHub Release は `GH_TOKEN` で `gh` を使う）。`test/unit/workflow.test.ts` が静的に検査する
+- Dependabot（github-actions）は `.github/workflows/` の SHA + コメントを更新するが、`src/cli/workflow.ts` に埋め込んだ SHA は対象外。更新手順: `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` で SHA を得る（`object.type` が `tag` なら `git/tags/<sha>` で辿ってコミット SHA にする）→ `src/cli/workflow.ts` の SHA とコメントを置き換える → `mise run test` → 利用者向けに再生成を案内（`flarelet workflow generate --force`）
+
+### Well-Architected Do First（H-4 / H-1 / M-1）
+- **H-4 永続データ保護**: `lifetime === "retain"` の Data だけ、S3 に `versioned: true` + ライフサイクル（非現行バージョン 30 日で失効、不完全マルチパートアップロード 7 日で中止）、DynamoDB に `deletionProtection: true`。PR preview と dev（`lifetime: "destroy"`）は付けない。論理 ID は変わらない（プロパティ追加のみで置換なし）。`destroy --stage-resources` は `deleteRetained` が `UpdateTable(DeletionProtectionEnabled: false)` の後に `DeleteTable` する。S3 は `emptyBucket` が ListObjectVersions で全バージョン・削除マーカーを消すので変更なし
+- **H-1 アクセスログ**: HTTP API の default stage に 1 行 JSON のアクセスログ（requestId / ip / requestTime / httpMethod / routeKey / path / status / protocol / responseLength / responseLatency / integrationLatency / integrationErrorMessage のみ）。authorizer・claims・ヘッダ・クエリ・Cookie は PII・トークン流出防止のため入れない（`$context.path` はパスのみ）。宛先は version スタック内の `ApiAccessLogs`（ONE_MONTH、DESTROY。IAM ロール不要）。front Lambda のみ `loggingFormat: JSON`。app Lambda は LWA 経由のユーザーアプリ stdout の見え方と `flarelet logs` の表示が変わるため対象外。`flarelet logs` は stack output のロググループだけを読むので、アクセスログは対象に加えない（API Gateway 側の記録で、アプリログとは用途が違う）
+- **監査ログを destroy 後も残すことは見送り**: アクセスログは version スタックの DESTROY のまま。version スタックは日常的に destroy されるので RETAIN にすると消し残しが増える。destroy 後も残すには stage 側にロググループを置く設計が必要で、今回は見送り
+- **M-1 スロットリング**: 既定で有効。永続 stage は rate 1000 / burst 2000、PR preview は rate 100 / burst 200。根拠: 目的は正常なトラフィックを絞ることではなく、暴走・悪用時の課金（denial of wallet）に上限を設けるガードレール。実効的な上限は Lambda 同時実行（アカウント既定 1000、1 リクエストが front + app で 2 消費）で、1000 req/s はレイテンシ 100ms なら約 200 同時実行に収まる水準。当初案の 100 / 200 は正常トラフィックを 429 にするリスクの方が大きいと判断し 10 倍にした。PR preview はアクセスが少数に限られるため 100 に留め、漏れた URL への負荷を抑える。超える利用は `http.throttle: { rate, burst }` で上げる。無効化は `http.throttle: false`。上限は API Gateway のアカウント既定（rate 10000 / burst 5000）で、超える値はスキーマでエラー（それ以上はクォータ申請が要り、yaml だけでは効かないため）。IR は `"default" | "off" | { rate, burst }` で未指定を保持し、永続/ephemeral の既定値は constructs（lifecycle を知る層）が当てる（IR はデプロイ非依存）
+- 既存利用者への影響: 次回 deploy で S3 バージョニング・削除保護・スロットリング・アクセスログが有効になる（置換なし）。バージョニング有効化後は元に戻せない（一時停止のみ）
+
+### CloudWatch アラーム（opt-in の `alerts`）
+- yaml: トップレベル `alerts: { topicArn }`（strictObject、ARN は標準 SNS トピックの形式。FIFO は CloudWatch アラームの宛先にできないので拒否）。IR は `alerts: { topicArn } | null`
+- **opt-in**: 未指定ならアラームを作らず、テンプレートは従来と同一（unit で保証。PR preview と dev は `alerts` を指定してもテンプレートが変わらないことも検査）
+- **SNS トピックは作らない**: 利用者の既存トピックを使う。メール購読の確認が deploy ごとに発生することや、トピックのライフサイクル（purge・購読管理）を Flarelet が抱えることを避ける。`Topic.fromTopicArn` で参照するだけ（`CfnOutput` もクロススタック Export も作らない）
+- **永続 stage のみ**: PR preview（短命。作って消すたびに ALARM/OK 通知が飛ぶと通知先が汚れる）と dev（開発用）には、設定があっても作らない。Lambda と HTTP API のアラームは version スタック、DynamoDB は stage スタック（テーブルと同じスタック）
+- アラームの最小セット（期間 5 分、評価 1 回、`NOT_BREACHING`、ALARM と OK の両方を SNS へ）: Lambda（app と、front がある場合は front）の `Errors`（Sum >= 5）と `Throttles`（Sum >= 1）、HTTP API の `5xx`（`AWS/ApiGateway`、次元 `ApiId` + `Stage=$default`、Sum >= 5）、DynamoDB テーブルごとの `SystemErrors`（Sum >= 1）と `ReadThrottleEvents` + `WriteThrottleEvents`（Sum >= 1）。p99 Latency はしきい値を決められないので入れない
+- DynamoDB `SystemErrors` は `TableName` + `Operation` の組でしか発行されない（TableName だけの次元は常に INSUFFICIENT_DATA）。CDK の `metricSystemErrorsForOperations` で操作ごとの合計式にする。アラームの数式は 10 メトリクスまでなので、GetItem / PutItem / UpdateItem / DeleteItem / Query / Scan / BatchGetItem / BatchWriteItem / TransactGetItems / TransactWriteItems の 10 操作に絞る（PartiQL と GetRecords は含めない）。スロットリングは `TableName` だけで発行される `ReadThrottleEvents` + `WriteThrottleEvents` の和
+- alarmName は `<スタック名>-<対象>`（例 `flarelet-myapp-prod-v1-app-errors`、`flarelet-myapp-prod-database-main-system-errors`）。スタック名が一意なので衝突しない。alarmDescription は英語 1 文
+- リージョン: アラームアクションは同じリージョンの SNS トピックにしか届かない。トピック ARN のリージョンとスタックのリージョンがどちらも具体的に分かるとき、不一致は synth 時のエラー（トークンならスキップ）。暗号化トピックには CloudWatch 用のキーポリシーが要る旨を README に注記
+- **しきい値は固定**（今回）。将来の拡張ポイント: `alerts.lambda.errors` などで上書きできるようにする、p99 Latency、DLQ やアクセスログのメトリクスフィルタ、複数トピック、ステージごとの出し分け
+- 既存利用者への影響: `alerts` を追加しない限り無し
 
 ## 改名（2026-10-02）
 

@@ -1,4 +1,4 @@
-import { CfnResource, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { CfnResource, Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -18,6 +18,8 @@ export class Data extends Construct {
   constructor(scope: Construct, id: string, props: { ir: FlareletIR; lifetime: Lifetime }) {
     super(scope, id);
     const removalPolicy = removalOf(props.lifetime);
+    // 永続 stage だけ誤削除・上書きから守る。destroy（PR preview / dev）は stack と共に消せるままにする
+    const persistent = props.lifetime === "retain";
     for (const { name } of props.ir.databases) {
       this.tables[name] = new dynamodb.Table(this, `Database-${name}`, {
         partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
@@ -25,6 +27,7 @@ export class Data extends Construct {
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
         removalPolicy,
+        ...(persistent ? { deletionProtection: true } : {}),
       });
     }
     for (const { name } of props.ir.storages) {
@@ -34,6 +37,17 @@ export class Data extends Construct {
         enforceSSL: true,
         removalPolicy,
         autoDeleteObjects: props.lifetime === "destroy",
+        ...(persistent
+          ? {
+              versioned: true,
+              lifecycleRules: [
+                {
+                  noncurrentVersionExpiration: Duration.days(30),
+                  abortIncompleteMultipartUploadAfter: Duration.days(7),
+                },
+              ],
+            }
+          : {}),
       });
     }
     if (props.lifetime === "destroy" && props.ir.storages.length) containAutoDeleteLogs(this);

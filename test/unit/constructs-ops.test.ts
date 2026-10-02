@@ -69,7 +69,7 @@ describe("log groups", () => {
   it("creates deletable log groups for the app and front Lambdas and outputs them", () => {
     const t = Template.fromStack(build(FULL, prod).version);
     const groups = t.findResources("AWS::Logs::LogGroup");
-    expect(Object.keys(groups)).toHaveLength(2);
+    expect(Object.keys(groups)).toHaveLength(3); // app / front / API アクセスログ
     for (const g of Object.values(groups) as { DeletionPolicy?: string }[]) {
       expect(g.DeletionPolicy).toBe("Delete");
     }
@@ -90,9 +90,9 @@ describe("log groups", () => {
     }
   });
 
-  it("has only the app log group without auth", () => {
+  it("has only the app and API access log groups without auth", () => {
     const t = Template.fromStack(build(OPEN, prod).version);
-    t.resourceCountIs("AWS::Logs::LogGroup", 1);
+    t.resourceCountIs("AWS::Logs::LogGroup", 2);
     t.hasOutput("AppLogGroup", {});
     expect(t.findOutputs("FrontLogGroup")).toEqual({});
   });

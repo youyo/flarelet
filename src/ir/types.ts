@@ -34,8 +34,12 @@ export type AuthIR =
   | (AuthOn & { provider: "oidc"; oidc: OidcIR })
   | (AuthOn & { provider: "entra"; entra: EntraIR });
 
+/** "default" = 未指定（永続/ephemeral の既定値を constructs が当てる）、"off" = 無効。 */
+export type ThrottleIR = "default" | "off" | { rate: number; burst: number };
+
 export interface HttpIR {
   auth: AuthIR;
+  throttle: ThrottleIR;
 }
 
 export interface GitIR {
@@ -57,4 +61,6 @@ export interface FlareletIR {
   aiModels: string[];
   secrets: string[];
   git: GitIR;
+  /** opt-in の CloudWatch アラーム（永続 stage のみ）。未指定は null。 */
+  alerts: { topicArn: string } | null;
 }

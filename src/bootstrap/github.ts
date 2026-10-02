@@ -102,14 +102,12 @@ function rolePolicy(account: string, region: string, qualifier: string): iam.Pol
       actions: ["cloudformation:DeleteStack", "cloudformation:UpdateStack"],
       resources: [stack("flarelet-bootstrap-*")],
     }),
-    // secrets は読み取りのみ（値の書き込みは人が flarelet secret set で行う）
+    // CDK bootstrap のバージョン確認（deploy の事前チェック）だけ。`/flarelet/*` の SSM は CI 経路で読まない
+    // （アプリの secrets は app Lambda が実行時に自分のロールで読み、session epoch は CloudFormation が作る）
     new iam.PolicyStatement({
-      sid: "ReadFlareletSecrets",
-      actions: ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
-      resources: [
-        `arn:aws:ssm:${region}:${account}:parameter/flarelet/*`,
-        `arn:aws:ssm:${region}:${account}:parameter/cdk-bootstrap/${qualifier}/version`,
-      ],
+      sid: "ReadBootstrapVersion",
+      actions: ["ssm:GetParameter"],
+      resources: [`arn:aws:ssm:${region}:${account}:parameter/cdk-bootstrap/${qualifier}/version`],
     }),
     // PR プレビューの Preview Auth トークン。PR preview のシークレット（flarelet:stage=preview かつ
     // flarelet:lifecycle=ephemeral）だけ。永続 stage（preview/current を含む）の Cookie 署名鍵は読めない

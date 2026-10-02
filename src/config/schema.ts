@@ -201,9 +201,26 @@ function isHttpsUrl(v: string): boolean {
   }
 }
 
+/** API Gateway のアカウント既定クォータ（rate 10000 req/s、burst 5000）を上限にする。 */
+const THROTTLE_MAX_RATE = 10000;
+const THROTTLE_MAX_BURST = 5000;
+
+const throttleObject = z.strictObject({
+  rate: z.number().positive("must be a positive number").max(THROTTLE_MAX_RATE),
+  burst: z
+    .number()
+    .int("must be an integer")
+    .positive("must be a positive integer")
+    .max(THROTTLE_MAX_BURST),
+});
+
 const http = z.union([
   z.boolean(),
-  z.strictObject({ auth: z.union([z.boolean(), authObject]).optional() }),
+  z.strictObject({
+    auth: z.union([z.boolean(), authObject]).optional(),
+    // false で無効化。省略時は lifecycle ごとの既定値（constructs）
+    throttle: z.union([z.literal(false), throttleObject]).optional(),
+  }),
 ]);
 
 const secrets = z
@@ -252,6 +269,15 @@ const git = z.strictObject({
   pullRequests: z.boolean().optional(),
 });
 
+/** 既存の標準 SNS トピック（FIFO は CloudWatch アラームの宛先にできない）。Flarelet はトピックを作らない。 */
+const SNS_TOPIC_ARN = /^arn:aws:sns:[a-z]{2}(?:-[a-z]+)+-\d:\d{12}:[A-Za-z0-9_-]{1,256}$/;
+
+const alerts = z.strictObject({
+  topicArn: z
+    .string()
+    .regex(SNS_TOPIC_ARN, "must be an SNS topic ARN such as arn:aws:sns:<region>:<account>:<name>"),
+});
+
 const configObject = z.strictObject({
   version: z.literal(1, { error: "must be 1" }),
   name: appName,
@@ -262,6 +288,7 @@ const configObject = z.strictObject({
   ai: ai.optional(),
   secrets: secrets.optional(),
   git: git.optional(),
+  alerts: alerts.optional(),
 });
 
 /** 外部 IdP の資格情報名は Flarelet が管理する（アプリには渡さない）ので `secrets:` に宣言させない。 */

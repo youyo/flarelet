@@ -196,3 +196,44 @@ describe("runWorkflowGenerate", () => {
     await mkdir(dir, { recursive: true });
   });
 });
+
+// Actions は 40 桁コミット SHA で固定し、元のタグをコメントに残す（Dependabot が両方を更新できる形式）。
+// checkout は後続ステップが git 資格情報を使わないので persist-credentials: false にする
+describe("GitHub Actions pinning", () => {
+  const usesLines = (text: string) => text.split("\n").filter((l) => /^\s*-?\s*uses:/.test(l));
+  const expectPinned = (text: string) => {
+    const lines = usesLines(text);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(l, l).toMatch(/uses:\s+[\w.-]+\/[\w./-]+@[0-9a-f]{40}\s+# v\d+\S*\s*$/);
+    }
+  };
+  const expectNoPersist = (doc: any) => {
+    let checkouts = 0;
+    for (const job of Object.values<any>(doc.jobs)) {
+      for (const step of job.steps) {
+        if (typeof step.uses === "string" && step.uses.startsWith("actions/checkout@")) {
+          checkouts++;
+          expect(step.with?.["persist-credentials"]).toBe(false);
+        }
+      }
+    }
+    expect(checkouts).toBeGreaterThan(0);
+  };
+
+  for (const runtime of ["python", "typescript"] as const) {
+    it(`generated workflow (${runtime}) pins every action by SHA and disables persisted credentials`, () => {
+      const w = workflowTemplate({ runtime, branches: ["main"], version: "0.0.1" });
+      expectPinned(w);
+      expectNoPersist(parseYaml(w));
+    });
+  }
+
+  for (const file of ["ci.yml", "release.yml"]) {
+    it(`.github/workflows/${file} pins every action by SHA and disables persisted credentials`, async () => {
+      const text = await readFile(join(__dirname, "../../.github/workflows", file), "utf8");
+      expectPinned(text);
+      expectNoPersist(parseYaml(text));
+    });
+  }
+});
