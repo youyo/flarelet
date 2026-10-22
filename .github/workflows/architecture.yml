@@ -10,7 +10,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2 # mode: diff reads the pull request's head commit
       - uses: sketio-app/action@abba4f868c08a643f1a377b90907a9f1ccd4b0f3 # v1.5.0
